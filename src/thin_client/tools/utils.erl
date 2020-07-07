@@ -1,5 +1,5 @@
 -module(utils).
--export([hash_name/1, hash_data/1, calculateSchemaId/1]).
+-export([hash_name/1, hash_data/1, calculate_schemaId/1]).
 
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
 -define(FNV1_PRIME, 16#01000193).
@@ -39,8 +39,8 @@ to_lower(Char) ->
 name_hash(Char, Acc) -> 31 * Acc + to_lower(Char).
 data_hash(Byte, Acc) -> 31 * Acc + Byte.
 
-calculateSchemaId([]) -> 0;
-calculateSchemaId(Fields) ->
+calculate_schemaId([]) -> 0;
+calculate_schemaId(Fields) ->
     Id = lists:foldl(fun(FieldName, Acc) ->
                              FieldId = utils:hash_name(FieldName),
                              lists:foldl(fun(Shift, IAcc) ->
@@ -53,11 +53,3 @@ calculateSchemaId(Fields) ->
     if Id =< 16#7FFFFFFF -> Id;
        true -> Id - 16#100000000
     end.
-
-
-
-
-
-
-
-

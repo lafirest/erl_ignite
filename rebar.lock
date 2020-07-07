@@ -1,1 +1,18 @@
-[].
+{"1.1.0",
+[{<<"cf">>,{pkg,<<"cf">>,<<"0.3.1">>},2},
+ {<<"erlware_commons">>,{pkg,<<"erlware_commons">>,<<"1.3.1">>},1},
+ {<<"qdate">>,
+  {git,"https://github.com/choptastic/qdate.git",
+       {ref,"accda0db1afce64d1689a6192713dd69ae057e3f"}},
+  0},
+ {<<"qdate_localtime">>,{pkg,<<"qdate_localtime">>,<<"1.1.0">>},1},
+ {<<"sync">>,
+  {git,"git://github.com/rustyio/sync.git",
+       {ref,"9106be75883d7646dae72d4ac80c6ea88464a5ca"}},
+  0}]}.
+[
+{pkg_hash,[
+ {<<"cf">>, <<"5CB902239476E141EA70A740340233782D363A31EEA8AD37049561542E6CD641">>},
+ {<<"erlware_commons">>, <<"0CE192AD69BC6FD0880246D852D0ECE17631E234878011D1586E053641ED4C04">>},
+ {<<"qdate_localtime">>, <<"5F6C3ACF10ECC5A7E2EFA3DCD2C863102B962188DBD9E086EC01D29FE029DA29">>}]}
+].

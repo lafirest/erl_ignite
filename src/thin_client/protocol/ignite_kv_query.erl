@@ -1,5 +1,8 @@
 -module(ignite_kv_query).
--export([get/2]).
+-export([get/2, 
+         get_all/2,
+         put/3,
+         on_response/2]).
 
 -include("type_binary_spec.hrl").
 
@@ -27,11 +30,39 @@
 
 get(Cache, Key) ->
     Content = ignite_encoder:write(Key, <<(get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>),
-    ignite_query:make_request(erlang:byte_size(Content), ?OP_CACHE_GET, Content).
+    {ignite_kv_query, ?OP_CACHE_GET, Content}.
 
-get_all(Cache, Len) ->
-    Content = ignite_encoder:write(Len, <<(get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>),
-    ignite_query:make_request(erlang:byte_size(Content), ?OP_CACHE_GET_ALL, Content).
+get_all(Cache, Keys) ->
+    Len = erlang:length(Keys),
+    Content = <<(get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec, Len:?sint_spec>>,
+    Content2 = 
+    lists:foldl(fun(Key, ContentAcc) -> ignite_encoder:write(Key, ContentAcc) end, 
+                Content, 
+                Keys),
+    {ignite_kv_query, ?OP_CACHE_GET_ALL, Content2}.
+
+put(Cache, Key, Value) ->
+    Content = <<(get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>, 
+    Content2 = ignite_encoder:write(Key, Content),
+    Content3 = ignite_encoder:write(Value, Content2),
+    {ignite_kv_query, ?OP_CACHE_PUT, Content3}.
+
+on_response(?OP_CACHE_GET, Content) -> ignite_decoder:read_value(Content);
+on_response(?OP_CACHE_GET_ALL, <<Len:?sint_spec, Body/binary>>) -> 
+    {Values, _} =
+    do_times(Len,
+            fun({PairAcc, BinAcc}) ->
+                    {Key, BinAcc2} = ignite_decoder:read(BinAcc),
+                    {Value, BinAcc3} = ignite_decoder:read(BinAcc2),
+                    {[{Key, Value} | PairAcc], BinAcc3}
+            end,
+            {[], Body}),
+    Values;
+on_response(?OP_CACHE_PUT, _) -> ok.
 
 get_cache_id(CacheId) when is_integer(CacheId) -> CacheId;
 get_cache_id(CacheName) -> utils:hash_data(CacheName).
+
+do_times(0, _, Acc) -> Acc;
+do_times(N, Fun, Acc) ->
+    do_times(N - 1, Fun, Fun(Acc)).

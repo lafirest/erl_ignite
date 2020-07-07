@@ -5,7 +5,7 @@
 -define(handshake_code, 1).
 -define(client_code, 2).
 
-hand_shake(Major, Minor, Patch, Username, Passwrod) ->
+hand_shake(Major, Minor, Patch, Username, Password) ->
     Content = 
         <<?handshake_code:?sbyte_spec, 
           Major:?sshort_spec, 
@@ -14,7 +14,7 @@ hand_shake(Major, Minor, Patch, Username, Passwrod) ->
           ?client_code:?sbyte_spec>>,
 
     Content1 = ignite_encoder:write({bin_string, Username}, Content),
-    Content2 = ignite_encoder:write({bin_string, Passwrod}, Content1),
+    Content2 = ignite_encoder:write({bin_string, Password}, Content1),
     TotalLen = erlang:byte_size(Content2),
     <<TotalLen:?sint_spec, Content2/binary>>.
 
