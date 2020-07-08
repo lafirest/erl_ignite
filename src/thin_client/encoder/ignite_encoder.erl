@@ -36,13 +36,19 @@ write({bool, Bool}, Bin) ->
 write(undefined, Bin) ->
     <<Bin/binary, ?null_code:?sbyte_spec>>;
 
+write({atom, Atom}, Bin) ->
+    write({{complex_object, ?ATOM_TYPE_NAME}, 
+           {erlang_atom, erlang:atom_to_binary(Atom)}},
+          Bin);
+
 write({bin_string, String}, Bin) ->
-    Len = erlang:byte_size(String),
+    Len = erlang:byte_size(String), 
     <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, String/binary>>;
 
 write({string, String}, Bin) ->
     BinString = unicode:characters_to_binary(String),
-    write({bin_string, BinString}, Bin);
+    Len = erlang:byte_size(BinString), 
+    <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, BinString/binary>>;
 
 write({uuid, UUID}, Bin) ->
     <<Bin/binary, ?uuid_code:?sbyte_spec, UUID/binary>>;
@@ -108,51 +114,73 @@ write({date_array, DateArray}, Bin) ->
 write({time_array, TimeArray}, Bin) ->
     write_nullable_object_array(TimeArray, time, <<Bin/binary, ?time_array_code:?sbyte_spec>>);
 
-write({object_array, TypeName, Array}, Bin) ->
+write({{object_array, TypeName}, Array}, Bin) ->
     TypeId = utils:hash_name(TypeName),
-    Len = erlang:length(Array),
-    lists:foldl(fun(Value, Acc) ->
-                    write({complex_object, TypeName, Value}, Acc)
-                end,
-                <<?object_array_code:?sbyte_spec, TypeId:?sint_spec, Len:?sint_spec>>,
-               Array);
+    write_nullable_object_array(Array, 
+                                {complex_object, TypeName},
+                                <<Bin/binary, ?object_array_code:?sbyte_spec, TypeId:?sint_spec>>);
 
-write({map, Map}, Bin) ->
-    Bin;
 
-write({enum_array, TypeName, EnumArray}, Bin) ->
+write({{map, KeyType, ValueType}, Map}, Bin) ->
+    KeyValues = maps:to_list(Map),
+    Len = erlang:length(KeyValues),
+    lists:foldl(fun({Key, Value}, Acc) ->
+                    Acc1 = write({KeyType, Key}, Acc),
+                    write({ValueType, Value}, Acc1)
+                end, 
+                <<Bin/binary, ?map_code:?sbyte_spec, Len:?sint_spec, 1:?sbyte_spec>>,
+                KeyValues);
+
+write({{enum_array, TypeName}, EnumArray}, Bin) ->
     TypeId = utils:hash(TypeName),
     write_nullable_object_array(EnumArray, enum, <<Bin/binary, ?enum_array_code:?sbyte_spec, TypeId:?sint_spec>>);
 
-write({complex_object, TypeName, Value}, Bin) ->
+write({{complex_object, TypeName}, Value}, Bin) ->
     #type_schema{type_id = TypeId,
+                 type_type = TypeType,
                  schema_id = SchemaId, 
                  version = Version,
-                 field_ids = FieldIds,
-                 schema_format = SchemaFormat,
-                 to_spec = ToSpec} = schema_manager:get_type(TypeName),
-    Fields = ToSpec(Value),
+                 field_types = FieldTypes,
+                 field_keys = FieldKeys,
+                 field_id_order = FieldIdOrder,
+                 schema_format = SchemaFormat} = schema_manager:get_type(TypeName),
+    FieldPairs = get_field_pairs(FieldTypes, TypeType, FieldKeys, Value),
     BaseOffset = 24,
     BaseFlag = ?USER_TYPE,
     {FlagT, BodyT, HashCodeT, SchemaOffsetT} =
-    if Fields =:= [] -> {BaseFlag, <<>>, 0, 0};
+    if FieldPairs =:= [] -> {BaseFlag, <<>>, 0, 0};
        true ->
-           {_, MaxOffset, FieldData, Offsets} = 
-           lists:foldl(fun(Field, {LastOffsetAcc, MaxOffsetAcc, FieldDataAcc, OffsetAcc}) ->
-                               FieldDataAcc2 = write(Field, FieldDataAcc),
+           {_, MaxOffset, FieldData, OffsetsR} = 
+           lists:foldl(fun(FieldPair,
+                           {LastOffsetAcc, MaxOffsetAcc, FieldDataAcc, OffsetAcc}) ->
                                LastOffsetAcc2 = erlang:byte_size(FieldDataAcc) + BaseOffset, 
+                               FieldDataAcc2 = write(FieldPair, FieldDataAcc),
                                OffsetsAcc2 = [LastOffsetAcc2 | OffsetAcc],
                                MaxOffset2 = erlang:max(LastOffsetAcc2 - LastOffsetAcc, MaxOffsetAcc),
                                {LastOffsetAcc2, MaxOffset2, FieldDataAcc2, OffsetsAcc2}
-                       end, {24, 24, <<>>, [24]}, Fields),
+                       end, 
+                       {0, 0, <<>>, [0]}, 
+                       FieldPairs),
            {OffsetType, OffsetFlag} = get_offset_type(MaxOffset),
-           Offsets2 = lists:reverse(Offsets),
-           Flag2 = BaseFlag bor OffsetFlag bor ?HAS_SCHEMA bor ?COMPACT_FOOTER,
-           SchemaData = lists:foldl(fun(Offset, Acc) -> write({OffsetType, Offset}, Acc) end, 
-                                    <<>>,
-                                    Offsets2),
+           Offsets = lists:reverse(OffsetsR),
+           Flag2 = BaseFlag bor OffsetFlag bor ?HAS_SCHEMA,  
+           case SchemaFormat of
+               full ->
+                   Flag3 = Flag2,
+                   SchemaData = lists:foldl(fun({FieldId, Offset}, Acc) -> 
+                                                    Acc1 = write_direct({int, FieldId}, Acc),
+                                                    write_direct({OffsetType, Offset}, Acc1) 
+                                            end, 
+                                            <<>>,
+                                            lists:zip(FieldIdOrder, Offsets));
+               _ ->
+                   Flag3 = Flag2 bor ?COMPACT_FOOTER,
+                   SchemaData = lists:foldl(fun(Offset, Acc) -> write_direct({OffsetType, Offset}, Acc) end, 
+                                            <<>>,
+                                            Offsets)
+           end,
            Body = <<FieldData/binary, SchemaData/binary>>,
-           {Flag2, Body, utils:hash_data(Body), BaseOffset + erlang:byte_size(FieldData)}
+           {Flag3, Body, utils:hash_data(Body), BaseOffset + erlang:byte_size(FieldData)}
     end,
     <<Bin/binary,
       ?complex_object_code:?sbyte_spec,
@@ -174,18 +202,13 @@ write({binary_enum, TypeName, Value}, Bin) ->
     <<Bin/binary, ?binary_enum_code:?sbyte_spec, TypeId:?sint_spec, Value:?sint_spec>>.
 
 %%----Write With Type Info-------------------------------------------------------------------
+write_direct({byte, Byte}, Bin) -> <<Bin/binary, Byte:?sbyte_spec>>;
 write_direct({short, Short}, Bin) -> <<Bin/binary, Short:?sshort_spec>>;
-
 write_direct({int, Int}, Bin) -> <<Bin/binary, Int:?sint_spec>>;
-
 write_direct({long, Long}, Bin) -> <<Bin/binary, Long:?slong_spec>>;
-
 write_direct({float, Float}, Bin) -> <<Bin/binary, Float:?sfloat_spec>>;
-
 write_direct({double, Double}, Bin) -> <<Bin/binary, Double:?sdouble_spec>>;
-
 write_direct({char, Char}, Bin) -> <<Bin/binary, Char?char_spec>>;
-
 write_direct({bool, Bool}, Bin) ->
     Value = if Bool -> 1;
                true -> 0
@@ -194,28 +217,35 @@ write_direct({bool, Bool}, Bin) ->
 
 write_array(List, Type, Bin) ->
     Len = erlang:length(List),
-    write_array2(List, Type, <<Bin/binary, Len:?sint_spec>>).
-
-write_array2([], _, Bin) -> Bin;
-write_array2([H|T], Type, Bin) -> 
-    Bin2 = write_direct({Type, H}, Bin),
-    write_array2(T, Type, Bin2).
+    lists:foldl(fun(Value, BinAcc) ->
+                    write_direct({Type, Value}, BinAcc)
+                end,
+                <<Bin/binary, Len:?sint_spec>>,
+                List).
 
 write_nullable_object_array(List, Type, Bin) ->
     Len = erlang:length(List),
-    write_nullable_object_array2(List, Type, <<Bin/binary, Len:?sint_spec>>).
-
-write_nullable_object_array2([], _, Bin) -> Bin;
-write_nullable_object_array2([H|T], Type, Bin) -> 
-    case H of
-        undefined -> write(undefined, Bin);
-        _ ->
-            Bin2 = write({Type, H}, Bin),
-            write_nullable_object_array2(T, Type, Bin2)
-    end.
+    lists:foldl(fun(Value, BinAcc) ->
+                    case Value of
+                        undefined -> write(undefined, BinAcc);
+                        _ -> write({Type, Value}, BinAcc)
+                    end
+                end,
+                <<Bin/binary, Len:?sint_spec>>,
+                List).
 
 get_offset_type(MaxOffset) ->
     if MaxOffset < 16#100 -> {byte, ?OFFSET_ONE_BYTE};
        MaxOffset < 16#10000 -> {short, ?OFFSET_TWO_BYTES};
        true -> {int, 0}
     end.
+
+get_field_pairs([], _, _, _) -> [];
+
+get_field_pairs(Types, tuple, _, Value) ->
+    [_ | Values] = erlang:tuple_to_list(Value),
+    lists:zip(Types, Values);
+
+get_field_pairs(Types, map, FieldKeys, Map) ->
+    Values = [maps:get(OrderKey, Map) || OrderKey <- FieldKeys],
+    lists:zip(Types, Values).

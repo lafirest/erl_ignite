@@ -56,4 +56,3 @@
 -define(OFFSET_ONE_BYTE, 16#0008).
 -define(OFFSET_TWO_BYTES, 16#0010).
 -define(COMPACT_FOOTER, 16#0020).
-

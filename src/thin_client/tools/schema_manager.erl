@@ -10,6 +10,10 @@
 
 -behaviour(gen_server).
 
+-include("schema.hrl").
+-define(SERVER, ?MODULE).
+
+
 %% API
 -export([start_link/0]).
 
@@ -23,8 +27,6 @@
 
 -export([register_type/1, get_type/1]).
 
--include("schema.hrl").
--define(SERVER, ?MODULE).
 
 -record(state, {}).
 
@@ -59,6 +61,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     ets:new(?MODULE, [set, public, named_table, {keypos, #type_schema.type_id}, {read_concurrency, true}]),
+    lists:foreach(fun(Type) -> register_type(Type) end, default_types()),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -133,26 +136,72 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-register_type(#type_register_data{type_name = TypeName,
-                                  version = Version,
-                                  fields = Fields,
-                                  to_spec = ToSpec,
-                                  from_reader = FromReader}) -> 
-    TypeId = utils:hash_data(TypeName),
-    SchemaId = utils:calculate_schemaId(Fields),
-    FieldIds = [utils:hash_name(Field) || Field <- Fields],
+-spec default_types() -> list(#type_register{}).
+default_types() ->
+    Atom = #type_register{type_name = "ErlangAtom",
+                          type_type = tuple,
+                          type_tag = atom,
+                          version = 1,
+                          schema_format = compact,
+                          fields = [
+                                    #field{name = "Value", type = bin_string}
+                                   ],
+                          on_upgrades = [],
+                          constructor = fun([Bin]) -> erlang:binary_to_atom(Bin) end},
+    [Atom].
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+register_type(#type_register{type_name = TypeName,
+                             type_type = TypeType,
+                             type_tag = TypeTag,
+                             version = Version,
+                             schema_format = SchemaFormat,
+                             fields  = FieldDefs,
+                             constructor = Constructor,
+                             on_upgrades = OnUpgrades}) -> 
+    TypeId = utils:hash_name(TypeName),
+    SchemaId = utils:calculate_schemaId([Def#field.name || Def <- FieldDefs]),
+    case TypeType of
+        tuple ->
+            FieldDataR = lists:foldl(fun(#field{name = Name, type = Type}, DataAcc) ->
+                                             FieldType = Type,
+                                             FieldId = utils:hash_name(Name),
+                                             [{FieldType, FieldId} | DataAcc]
+                                     end,
+                                     [],
+                                     FieldDefs),
+            {FieldTypes, FieldIdOrder} = lists:unzip(lists:reverse(FieldDataR)),
+            FieldKeys = undefined;
+        _ -> 
+            FieldDataR = lists:foldl(fun(#field{name = Name, type = Type, key = Key}, DataAcc) ->
+                                             FieldType = Type,
+                                             FieldId = utils:hash_name(Name),
+                                             [{FieldType, FieldId, Key} | DataAcc]
+                                     end,
+                                     [],
+                                     FieldDefs),
+            {FieldTypes, FieldIdOrder, FieldKeys} = lists:unzip3(lists:reverse(FieldDataR))
+
+    end,
     Schema = #type_schema{type_id = TypeId,
-                         type_name = TypeName,
-                         schema_id = SchemaId,
-                         version = Version,
-                         fields = Fields,
-                         field_ids = FieldIds,
-                         to_spec = ToSpec,
-                         from_reader = FromReader},
+                          type_name = TypeName,
+                          type_type = TypeType,
+                          type_tag = TypeTag,
+                          schema_id = SchemaId,
+                          version = Version,
+                          field_types = FieldTypes,
+                          field_id_order = FieldIdOrder,
+                          field_keys = FieldKeys,
+                          schema_format = SchemaFormat,
+                          constructor = Constructor,
+                          on_upgrades = OnUpgrades},
     ets:insert(?MODULE, Schema).
 
 get_type(TypeName) when is_list(TypeName) ->
-    TypeId = utils:hash_data(TypeName),
+    TypeId = utils:hash_name(TypeName),
     get_type(TypeId);
 
 get_type(TypeId) ->

@@ -23,6 +23,7 @@
 
 -compile(export_all).
 
+-include("schema.hrl").
 -include("type_binary_spec.hrl").
 -define(SERVER, ?MODULE).
 
@@ -259,14 +260,69 @@ put(Cache, Key, Value) ->
     after 10000 -> ok
     end.
 
+get_name(Cache, Name) ->
+    Ref = erlang:make_ref(),
+    From = self(),
+    Id = utils:hash_name(Name),
+    Query = {ignite_kv_query, 3000, <<0:?sbyte_spec, Id:?sint_spec>>},
+    gen_server:cast(thin_client, {query, From, Ref, Query}),
+    receive {on_query_success, Ref, _} ->
+                done
+    after 10000 -> ok
+    end.
+
+
 register_type() ->
-    TypeName = "Player",
-    Version = 1,
-    Fields = ["Sex", "Age", "Level"],
-    ToSpec = fun({player, Sex, Age, Level}) -> [{int, Sex}, {int, Age}, {int, Level}] end,
-    FromReader = fun([Sex, Age, Level]) -> {player, Sex, Age, Level} end,
-    schema_manager:register_type({type_register_data, TypeName, Version, Fields, ToSpec, FromReader}).
+    Player = #type_register{type_name = "Player",
+                            type_type = tuple,
+                            type_tag = player,
+                            version = 1,
+                            schema_format = compact,
+                            fields = [
+                                      #field{name = "Age", type = short},
+                                      #field{name = "Sex", type = bool},
+                                      #field{name = "Level", type = short},
+                                      #field{name = "Gold", type = int}
+                                     ],
+                            on_upgrades = []},
+    Monster = #type_register{type_name = "Monster",
+                             type_type = map,
+                             type_tag = undefined,
+                             version = 1,
+                             schema_format = compact,
+                             fields = [
+                                       #field{name = "Attack", type = int, key = atk},
+                                       #field{name = "Defience", type = int, key = def},
+                                       #field{name = "Reward", type = int, key = reward},
+                                       #field{name = "City", type = {complex_object, "City"}, key = city}
+                                      ],
+                             on_upgrades = []},
+    City = #type_register{type_name = "City",
+                          type_type = map,
+                          type_tag = undefined,
+                          version = 1,
+                          schema_format = compact,
+                          fields = [
+                                    #field{name = "Name", type = bin_string, key = name}
+                                   ],
+                          on_upgrades = []},
 
+    Person = #type_register{type_name = "org.apache.ignite.examples.Person",
+                            type_type = tuple,
+                            type_tag = person,
+                            version = 1,
+                            schema_format = compact,
+                            fields = [
+                                      #field{name = "id", type = long},
+                                      #field{name = "orgId", type = long},
+                                      #field{name = "firstName", type = string},
+                                      #field{name = "lastName", type = string},
+                                      #field{name = "resume", type = string},
+                                      #field{name = "salary", type = double}
+                                     ],
+                            on_upgrades = []},
 
-
-
+    schema_manager:register_type(Player),
+    schema_manager:register_type(City),
+    schema_manager:register_type(Person),
+    schema_manager:register_type(Monster).
