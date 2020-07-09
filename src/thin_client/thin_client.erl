@@ -31,9 +31,9 @@
 
 -record(request,
         {op_code :: request_id(),
-         handler :: atom(),
          ref :: reference(),
-         from :: pid()}).
+         from :: pid(),
+         state :: term()}).
 
 -type requests() :: #{request_id() => #request{}}.
 
@@ -129,20 +129,19 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({query, From, Ref, {Handler, Op, Content}}, 
+handle_cast({query, From, Ref, {Op, State, Content}}, 
             #client{alloc_id = AllocId,
                     requests = Requests,
-                    socket = Socket} = State) ->
-    logger:error("query ~p ~p ~p~n", [Handler, Op, Content]),
+                    socket = Socket} = Client) ->
     ReqData = ignite_query:make_request(AllocId, Op, Content),
     Request = #request{op_code = Op, 
-                       handler = Handler,
                        ref = Ref,
-                       from = From},
+                       from = From,
+                       state = State},
     logger:error("send :~p~n", [ReqData]),
     ok = gen_tcp:send(Socket, ReqData),
-    {noreply, State#client{alloc_id = AllocId + 1,
-                           requests = Requests#{AllocId => Request}}};
+    {noreply, Client#client{alloc_id = AllocId + 1,
+                            requests = Requests#{AllocId => Request}}};
 
 handle_cast(Msg, State) ->
     logger:error("un handle message:~p~n", [Msg]),
@@ -158,25 +157,26 @@ handle_cast(Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({tcp, Data}, #client{requests = Requests} = State) ->
+handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
     logger:error("receive :~p~n", [Data]),
     {Status, ReqId, Content} = ignite_query:on_response(Data),
     case maps:get(ReqId, Requests, undefined) of
         undefined ->
-            {noreply, State};
-        #request{handler = Handler, ref = Ref, from = From, op_code = OpCdoe} ->
+            {noreply, Client};
+        #request{ref = Ref, from = From, op_code = OpCdoe, state = State} ->
             case Status of
                 on_query_success ->
                     try
-                        Value = Handler:on_response(OpCdoe, Content),
+                        logger:error("Content is ~p~n", [Content]),
+                        Value = ignite_op_response_handler:on_response(OpCdoe, State, Content),
                         erlang:send(From, {on_query_success, Ref, Value})
                     catch
                         Type:Reason ->
                             logger:error("parse error:~p ~p~n", [Type, Reason])
                     end,
-                    {noreply, State#client{requests = maps:remove(ReqId, Requests)}};
+                    {noreply, Client#client{requests = maps:remove(ReqId, Requests)}};
                 _ ->
-                    {noreply, State}
+                    {noreply, Client}
             end
     end;
 
@@ -260,17 +260,25 @@ put(Cache, Key, Value) ->
     after 10000 -> ok
     end.
 
-get_name(Cache, Name) ->
+query(Cache, Table, Sql, Arg, Opt) ->
     Ref = erlang:make_ref(),
     From = self(),
-    Id = utils:hash_name(Name),
-    Query = {ignite_kv_query, 3000, <<0:?sbyte_spec, Id:?sint_spec>>},
+    Query = ignite_sql_query:query_fields(Cache, Table, Sql, Arg, Opt),
     gen_server:cast(thin_client, {query, From, Ref, Query}),
-    receive {on_query_success, Ref, _} ->
-                done
+    receive {on_query_success, Ref, Result} ->
+                Result
     after 10000 -> ok
     end.
 
+query_next_page(Id) ->
+    Ref = erlang:make_ref(),
+    From = self(),
+    Query = ignite_sql_query:query_fields_next_page(Id, [], 1),
+    gen_server:cast(thin_client, {query, From, Ref, Query}),
+    receive {on_query_success, Ref, Result} ->
+                Result
+    after 10000 -> ok
+    end.
 
 register_type() ->
     Player = #type_register{type_name = "Player",

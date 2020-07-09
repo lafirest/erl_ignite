@@ -1,5 +1,10 @@
 -module(utils).
--export([hash_name/1, hash_data/1, calculate_schemaId/1]).
+-export([hash_name/1, 
+         hash_data/1, 
+         calculate_schemaId/1,
+         get_cache_id/1,
+         to_raw_bool/1,
+         from_raw_bool/1]).
 
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
 -define(FNV1_PRIME, 16#01000193).
@@ -53,3 +58,12 @@ calculate_schemaId(Fields) ->
     if Id =< 16#7FFFFFFF -> Id;
        true -> Id - 16#100000000
     end.
+
+get_cache_id(CacheId) when is_integer(CacheId) -> CacheId;
+get_cache_id(CacheName) -> utils:hash_data(CacheName).
+
+to_raw_bool(true) -> 1;
+to_raw_bool(false) -> 0.
+
+from_raw_bool(1) -> true;
+from_raw_bool(0) -> false.

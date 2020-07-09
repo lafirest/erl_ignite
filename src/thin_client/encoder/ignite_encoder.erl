@@ -36,10 +36,9 @@ write({bool, Bool}, Bin) ->
 write(undefined, Bin) ->
     <<Bin/binary, ?null_code:?sbyte_spec>>;
 
-write({atom, Atom}, Bin) ->
-    write({{complex_object, ?ATOM_TYPE_NAME}, 
-           {erlang_atom, erlang:atom_to_binary(Atom)}},
-          Bin);
+write({term, Term}, Bin) ->
+    Data = erlang:term_to_binary(Term),
+    write({{complex_object, "ErlangTerm"}, {term, Data}}, Bin);
 
 write({bin_string, String}, Bin) ->
     Len = erlang:byte_size(String), 
@@ -120,17 +119,39 @@ write({{object_array, TypeName}, Array}, Bin) ->
                                 {complex_object, TypeName},
                                 <<Bin/binary, ?object_array_code:?sbyte_spec, TypeId:?sint_spec>>);
 
+write({{collection, Type, ElementType}, Collection}, Bin) ->
+    case Type of
+        array ->
+            RawType = 1,
+            Values = array:to_list(Collection);
+        list ->
+            RawType = 2,
+            Values = Collection;
+        sets ->
+            RawType = 3,
+            Values = sets:to_list(Collection);
+        ordsets ->
+            RawType = 4,
+            Values = ordsets:to_list(Collection)
+    end,
+    Len = erlang:length(Values),
+    lists:foldl(fun(Value, BinAcc) ->
+                    case Value of
+                        undefined -> write(undefined, BinAcc);
+                        _ -> write({ElementType, Value}, BinAcc)
+                    end
+                end,
+                <<Bin/binary, ?collection_code:?sbyte_spec, Len:?sint_spec, RawType:?sbyte_spec>>,
+                Values);
 
 write({{map, KeyType, ValueType}, Map}, Bin) ->
     KeyValues = maps:to_list(Map),
-    Len = erlang:length(KeyValues),
-    lists:foldl(fun({Key, Value}, Acc) ->
-                    Acc1 = write({KeyType, Key}, Acc),
-                    write({ValueType, Value}, Acc1)
-                end, 
-                <<Bin/binary, ?map_code:?sbyte_spec, Len:?sint_spec, 1:?sbyte_spec>>,
-                KeyValues);
+    write_map(KeyValues, 1, KeyType, ValueType, Bin);
 
+write({{orddict, KeyType, ValueType}, Orddict}, Bin) ->
+    KeyValues = orddict:to_list(Orddict),
+    write_map(KeyValues, 2, KeyType, ValueType, Bin);
+    
 write({{enum_array, TypeName}, EnumArray}, Bin) ->
     TypeId = utils:hash(TypeName),
     write_nullable_object_array(EnumArray, enum, <<Bin/binary, ?enum_array_code:?sbyte_spec, TypeId:?sint_spec>>);
@@ -210,9 +231,7 @@ write_direct({float, Float}, Bin) -> <<Bin/binary, Float:?sfloat_spec>>;
 write_direct({double, Double}, Bin) -> <<Bin/binary, Double:?sdouble_spec>>;
 write_direct({char, Char}, Bin) -> <<Bin/binary, Char?char_spec>>;
 write_direct({bool, Bool}, Bin) ->
-    Value = if Bool -> 1;
-               true -> 0
-            end,
+    Value = utils:to_raw_bool(Bool),
     <<Bin/binary, Value:?bool_spec>>.
 
 write_array(List, Type, Bin) ->
@@ -233,6 +252,15 @@ write_nullable_object_array(List, Type, Bin) ->
                 end,
                 <<Bin/binary, Len:?sint_spec>>,
                 List).
+
+write_map(Pairs, MapType, KeyType, ValueType, Bin) -> 
+    Len = erlang:length(Pairs),
+    lists:foldl(fun({Key, Value}, Acc) ->
+                    Acc1 = write({KeyType, Key}, Acc),
+                    write({ValueType, Value}, Acc1)
+                end, 
+                <<Bin/binary, ?map_code:?sbyte_spec, Len:?sint_spec, MapType:?sbyte_spec>>,
+                Pairs).
 
 get_offset_type(MaxOffset) ->
     if MaxOffset < 16#100 -> {byte, ?OFFSET_ONE_BYTE};

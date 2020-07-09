@@ -138,17 +138,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec default_types() -> list(#type_register{}).
 default_types() ->
-    Atom = #type_register{type_name = "ErlangAtom",
+    Term = #type_register{type_name = "ErlangTerm",
                           type_type = tuple,
-                          type_tag = atom,
+                          type_tag = term,
                           version = 1,
                           schema_format = compact,
                           fields = [
-                                    #field{name = "Value", type = bin_string}
+                                    #field{name = "Value", type = byte_array}
                                    ],
                           on_upgrades = [],
-                          constructor = fun([Bin]) -> erlang:binary_to_atom(Bin) end},
-    [Atom].
+                          constructor = fun([Bin]) -> erlang:binary_to_term(Bin) end},
+    [Term].
 
 %%%===================================================================
 %%% API functions

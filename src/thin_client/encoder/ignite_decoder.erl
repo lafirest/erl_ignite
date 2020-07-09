@@ -27,10 +27,7 @@ read(?double_code, <<Double:?sdouble_spec, Bin/binary>>) -> {Double, Bin};
 read(?char_code, <<Char?char_spec, Bin/binary>>) -> {Char, Bin};
 
 read(?bool_code, <<Value:?bool_spec, Bin/binary>>) -> 
-    Bool = if Value =:= 1 -> true;
-              true -> false
-            end,
-    {Bool, Bin};
+    {utils:from_raw_bool(Value), Bin};
 
 read(?null_code, Bin) -> {undefined, Bin};
 
@@ -77,7 +74,7 @@ read(?time_array_code, Bin) ->  read_array(Bin);
 
 read(?object_array_code, <<_:?sint_spec, Bin/binary>>) -> read_array(Bin);
 
-read(?map_code, <<Len:?sint_spec, 1:?sbyte_spec, Bin/binary>>) ->
+read(?map_code, <<Len:?sint_spec, MapType:?sbyte_spec, Bin/binary>>) ->
     {Pairs, Bin2} = 
     loop:dotimes(fun({PairAcc, BinAcc}) ->
                     {Key, BinAcc2} = read(BinAcc),
@@ -88,7 +85,28 @@ read(?map_code, <<Len:?sint_spec, 1:?sbyte_spec, Bin/binary>>) ->
                  Len,
                  {[], Bin}),
 
-    {maps:from_list(Pairs), Bin2};
+    {if MapType =:= 1 -> maps:from_list(Pairs);
+        true -> orddict:from_list(lists:reverse(Pairs))
+     end,
+     Bin2};
+
+read(?collection_code, <<Len:?sint_spec, Type:?sbyte_spec, Bin/binary>>) ->
+    {ValueR, Bin2} = 
+    loop:dotimes(fun({ValueAcc, BinAcc}) -> 
+                         {Value, BinAcc2} = read(BinAcc),
+                         {[Value | ValueAcc], BinAcc2}
+                 end,
+                 Len,
+                 {[], Bin}),
+    Values = lists:reverse(ValueR),
+
+    case Type of
+        1 -> Value = array:from_list(Values);
+        2 -> Value = Values;
+        3 -> Value = sets:from_list(Values);
+        4 -> Value = ordsets:from_list(Values)
+    end,
+    {Value, Bin2};
 
 read(?enum_array_code, <<_:?sint_spec, Bin/binary>>) -> read_array(Bin);
 
@@ -155,7 +173,7 @@ read(long, <<Long:?slong_spec, Bin/binary>>) -> {Long, Bin};
 read(float, <<Float:?sfloat_spec, Bin/binary>>) -> {Float, Bin};
 read(double, <<Double:?sdouble_spec, Bin/binary>>) -> {Double, Bin};
 read(char, <<Char?char_spec, Bin/binary>>) -> {Char, Bin};
-read(bool, <<Bool:?bool_spec, Bin/binary>>) -> {Bool, Bin}.
+read(bool, <<Bool:?bool_spec, Bin/binary>>) -> {utils:from_raw_bool(Bool), Bin}.
 
 read_array_with_type(Type, <<Len:?sint_spec, Bin/binary>>) -> 
     {Values, Bin2} =
