@@ -52,6 +52,7 @@
 -type map_key_type()      :: atom() | string() | binary().
 -type upgrade_hook() :: fun((term()) -> term()).
 -type constructor() :: fun((list(term())) -> term()).
+-type enum_info() :: {atom(), integer(), string()}.
 
 -record(field,
         {name :: string(),
@@ -81,7 +82,7 @@
 -record(enum_schema, 
         {type_id        :: integer(),
          type_name      :: string(),
-         values         :: property:proplist()
+         values         :: list(enum_info())
         }).
 
 -record(type_register,
@@ -97,8 +98,8 @@
 
 -record(enum_register,
         {type_name     :: string(),
-         offset        = 0,
-         values        :: list(atom()) | property:proplist()}).
+         values        :: list(enum_info())}).
 
--define(ENUM_NAME_POS, 1).
+-define(ENUM_ATOM_POS, 1).
 -define(ENUM_VALUE_POS, 2).
+-define(ENUM_NAME_POS, 3).

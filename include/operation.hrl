@@ -35,3 +35,12 @@
 -define(OP_REGISTER_BINARY_TYPE_NAME, 3001).
 -define(OP_GET_BINARY_TYPE, 3002).
 -define(OP_PUT_BINARY_TYPE, 3003).
+
+%%----Cache Configuration Operation----------------------------------------------------------
+-define(OP_CACHE_GET_NAMES, 1050).
+-define(OP_CACHE_CREATE_WITH_NAME, 1051).
+-define(OP_CACHE_GET_OR_CREATE_WITH_NAME, 1052).
+-define(OP_CACHE_CREATE_WITH_CONFIGURATION, 1053).
+-define(OP_CACHE_GET_OR_CREATE_WITH_CONFIGURATION, 1054).
+-define(OP_CACHE_GET_CONFIGURATION, 1055).
+-define(OP_CACHE_DESTROY, 1056).

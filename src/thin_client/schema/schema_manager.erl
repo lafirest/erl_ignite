@@ -199,8 +199,7 @@ register_type(#type_register{type_name = TypeName,
                           on_upgrades = OnUpgrades},
     ets:insert(?MODULE, Schema);
 
-register_type(#enum_register{type_name = TypeName, offset = Offset, values = ValuesT}) ->
-    Values = parse_enum_values(Offset, ValuesT),
+register_type(#enum_register{type_name = TypeName, values = Values}) ->
     TypeId = utils:hash_name(TypeName),
     Schema = #enum_schema{type_id = TypeId,
                           type_name = TypeName,
@@ -216,13 +215,4 @@ get_type(TypeId) ->
     case ets:lookup(?MODULE, TypeId) of
         [Schema] -> Schema;
         _ -> undefined
-    end.
-
-parse_enum_values(Offset, [H|_] = Values) ->
-    case erlang:is_atom(H) of
-        true -> 
-            Len = erlang:length(Values),
-            Nums = lists:seq(Offset, Len + Offset - 1),
-            lists:zip(Values, Nums);
-        _ -> Values
     end.

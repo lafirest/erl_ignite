@@ -108,6 +108,25 @@ on_response(?OP_GET_BINARY_TYPE_NAME, _, Bin) ->
 
 on_response(?OP_REGISTER_BINARY_TYPE_NAME, _, _) -> ok;
 
+on_response(?OP_GET_BINARY_TYPE, _, Content) -> schema:read(Content);
+on_response(?OP_PUT_BINARY_TYPE, _, _) -> ok;
+on_response(?OP_CACHE_CREATE_WITH_NAME, _, _) -> ok;
+on_response(?OP_CACHE_GET_OR_CREATE_WITH_NAME, _, _) -> ok;
+on_response(?OP_CACHE_GET_NAMES, _, <<Len:?sint_spec, Content/binary>>) -> 
+    loop:dotimes(fun({NameAcc, DataAcc}) -> 
+                        {Name, DataAcc2} = ignite_decoder:read(DataAcc),
+                        {[Name | NameAcc], DataAcc2}
+                 end,
+                 Len,
+                 {[], Content});
+
+on_response(?OP_CACHE_GET_CONFIGURATION, _, <<_:?sint_spec, Bin/binary>>) -> 
+    configuration:read(Bin);
+
+on_response(?OP_CACHE_CREATE_WITH_CONFIGURATION, _, _) -> ok;
+on_response(?OP_CACHE_GET_OR_CREATE_WITH_CONFIGURATION, _, _) -> ok;
+on_response(?OP_CACHE_DESTROY, _, _) -> ok;
+
 on_response(_, _, _) -> ok.
 
 handle_sql_query_response(CursorId, Row, Bin) ->
@@ -139,5 +158,3 @@ read_field_grid(Row, Column, Bin) ->
                  end,
                  Row,
                  {[], Bin}).
-
-

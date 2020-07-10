@@ -49,7 +49,7 @@ read(?enum_code, <<TypeId:?sint_spec, RawValue:?sint_spec, Bin/binary>>) ->
         undefined -> RawValue;
         #enum_schema{values = Values} ->
             Tuple = lists:keyfind(RawValue, ?ENUM_VALUE_POS, Values),
-            erlang:element(?ENUM_NAME_POS, Tuple)
+            erlang:element(?ENUM_ATOM_POS, Tuple)
     end,
     {Value, Bin};
 

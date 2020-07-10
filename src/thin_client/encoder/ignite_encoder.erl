@@ -71,7 +71,7 @@ write({enum, TypeName, Value}, Bin) ->
     case schema_manager:get_type(TypeId) of
         undefined -> Value;
         #enum_schema{values = Values} ->
-            Tuple = lists:keyfind(Value, ?ENUM_NAME_POS, Values),
+            Tuple = lists:keyfind(Value, ?ENUM_ATOM_POS, Values),
             erlang:element(?ENUM_VALUE_POS, Tuple)
     end,
     <<Bin/binary, ?enum_code:?sbyte_spec, TypeId:?sint_spec, RawValue:?sint_spec>>;

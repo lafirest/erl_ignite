@@ -55,3 +55,6 @@
 -define(OFFSET_ONE_BYTE, 16#0008).
 -define(OFFSET_TWO_BYTES, 16#0010).
 -define(COMPACT_FOOTER, 16#0020).
+
+%%----Fast Match Macro----------------------------------------------------------
+-define(match_string(Len, X), ?string_code:?sbyte_spec, Len:?sint_spec, X:Len/binary).
