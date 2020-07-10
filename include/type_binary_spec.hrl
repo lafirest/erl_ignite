@@ -41,8 +41,7 @@
 -define(time_array_code, 37).
 %% I don't need Decimal Array
 -define(object_array_code, 23).
-%% I think this is unnecessary
-%% -define(collection_code, 24).
+-define(collection_code, 24).
 -define(map_code, 25).
 -define(wrapped_data_code, 27).
 -define(enum_array_code, 29).

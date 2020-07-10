@@ -43,7 +43,15 @@ read(?date_code, <<Msecs:?slong_spec, Bin/binary>>) -> {qdate:to_date(Msecs div 
 
 read(?time_code, <<Value:?slong_spec, Bin/binary>>) -> {calendar:seconds_to_time(Value div 1000), Bin};
 
-read(?enum_code, <<_:?sint_spec, Value:?sint_spec, Bin/binary>>) -> {Value, Bin};
+read(?enum_code, <<TypeId:?sint_spec, RawValue:?sint_spec, Bin/binary>>) -> 
+    Value =
+    case schema_manager:get_type(TypeId) of 
+        undefined -> RawValue;
+        #enum_schema{values = Values} ->
+            Tuple = lists:keyfind(RawValue, ?ENUM_VALUE_POS, Values),
+            erlang:element(?ENUM_NAME_POS, Tuple)
+    end,
+    {Value, Bin};
 
 %% for performance, byte array shoud be binary, not byte list
 read(?byte_array_code, <<Len:?sint_spec, ByteArray:Len/binary, Bin/binary>>) -> {ByteArray, Bin};

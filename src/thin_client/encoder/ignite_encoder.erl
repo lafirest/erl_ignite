@@ -67,7 +67,14 @@ write({time, Time}, Bin) ->
 
 write({enum, TypeName, Value}, Bin) ->
     TypeId = utils:hash(TypeName),
-    <<Bin/binary, ?enum_code:?sbyte_spec, TypeId:?sint_spec, Value:?sint_spec>>;
+    RawValue = 
+    case schema_manager:get_type(TypeId) of
+        undefined -> Value;
+        #enum_schema{values = Values} ->
+            Tuple = lists:keyfind(Value, ?ENUM_NAME_POS, Values),
+            erlang:element(?ENUM_VALUE_POS, Tuple)
+    end,
+    <<Bin/binary, ?enum_code:?sbyte_spec, TypeId:?sint_spec, RawValue:?sint_spec>>;
 
 %% for performance, byte array shoud be binary, not byte list
 write({byte_array, ByteArray}, Bin) ->

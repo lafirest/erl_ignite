@@ -5,6 +5,10 @@
 -type field_id()      :: integer().
 -type type_type()     :: tuple | map.
 
+-type collection_type() :: array
+                    | sets
+                    | ordsets.
+
 -type field_type() :: byte       
                     | short             
                     | int  
@@ -14,7 +18,7 @@
                     | char
                     | bool
                     | undefined
-                    | atom               
+                    | term               
                     | bin_string
                     | string
                     | uuid
@@ -37,14 +41,15 @@
                     | date_array
                     | time_array
                     | {object_array, string()}
+                    | {collection, collection_type(), field_type()}
                     | {map, field_type(), field_type()}
+                    | {orddict, field_type(), field_type()}
                     | {enum_array, string()}
                     | {complex_object, string()}
                     | wrapped
                     | {binary_enum, string()}.
 
 -type map_key_type()      :: atom() | string() | binary().
-
 -type upgrade_hook() :: fun((term()) -> term()).
 -type constructor() :: fun((list(term())) -> term()).
 
@@ -73,6 +78,12 @@
          on_upgrades    :: list(upgrade_hook())
         }).
 
+-record(enum_schema, 
+        {type_id        :: integer(),
+         type_name      :: string(),
+         values         :: property:proplist()
+        }).
+
 -record(type_register,
         {type_name     :: string(),
          type_type     :: type_type(),
@@ -84,6 +95,10 @@
          on_upgrades   :: list(upgrade_hook())
         }).
 
+-record(enum_register,
+        {type_name     :: string(),
+         offset        = 0,
+         values        :: list(atom()) | property:proplist()}).
 
-%%----Default Types Name----------------------------------------------------------
--define(ATOM_TYPE_NAME, "ErlangAtom").
+-define(ENUM_NAME_POS, 1).
+-define(ENUM_VALUE_POS, 2).
