@@ -14,6 +14,11 @@
 -export([init/1]).
 
 -define(SERVER, ?MODULE).
+-define(workerSpec(Mod), {Mod, {Mod, start_link, []},
+                          transient, timer:minutes(1), worker, [Mod]}).
+
+-define(superSpec(Mod), {Mod, {Mod, start_link, []},
+                         transient, infinity, supervisor, [Mod]}).
 
 %%====================================================================
 %% API functions
@@ -31,7 +36,11 @@ start_link() ->
 %% Before OTP 18 tuples must be used to specify a child. e.g.
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
-    {ok, {{one_for_all, 0, 1}, []}}.
+    {ok, Connect} = application:get_env(erl_ignite, connect),
+    {ok, {PoolName, PoolCfgT}} = application:get_env(erl_ignite, pool),
+    PoolCfg = [{worker, {thin_client, Connect}} | PoolCfgT],
+    wpool:start_pool(PoolName, PoolCfg),
+    {ok, {{one_for_one, 6, 3600}, [?workerSpec(schema_manager)]}}.
 
 %%====================================================================
 %% Internal functions

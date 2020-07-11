@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/7]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -40,8 +40,7 @@
 -record(client, 
         {alloc_id :: request_id(),
          requests :: requests(),
-         socket :: gen_tcp:socket(),
-         buffer :: binary()
+         socket :: gen_tcp:socket()
         }).
 
 %%%===================================================================
@@ -55,10 +54,9 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link(Host, Port, Major, Minor, Patch, Username, Password) ->
-    gen_server:start_link({local, ?SERVER}, 
-                          ?MODULE, 
-                          [Host, Port, Major, Minor, Patch, Username, Password], 
+start_link(Args) ->
+    gen_server:start_link(?MODULE, 
+                          [Args], 
                           []).
 
 %%%===================================================================
@@ -76,21 +74,23 @@ start_link(Host, Port, Major, Minor, Patch, Username, Password) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Host, Port, Major, Minor, Patch, Username, Password]) ->
+init({Host, Port, {Major, Minor, Patch}, Username, Password}) ->
+    erlang:process_flag(trap_exit, true),
     case gen_tcp:connect(Host, Port, [inet, {active, false}, binary, {nodelay, true}, {keepalive, true}]) of
         {ok, Socket} ->
             HandShake = ignite_connection:hand_shake(Major, Minor, Patch, Username, Password),
             ok = gen_tcp:send(Socket, HandShake),
             case gen_tcp:recv(Socket, 0) of
                 {ok, Packet} ->
-                    io:format("on con :~p~n", [Packet]),
                     case ignite_connection:on_response(Packet) of
                         ok ->
-                            erlang:send_after(10, self(), recv),
+                            {ok, Recver} = thin_client_recver:start_link(self(), Socket),
+                            erlang:monitor(process, Recver),
+                            gen_tcp:controlling_process(Socket, Recver),
+                            erlang:send(Recver, recv),
                             {ok, #client{alloc_id = 1,
                                          requests = #{},
-                                         socket = Socket,
-                                         buffer = <<>>}};
+                                         socket = Socket}};
                         Reason ->
                             {stop, io_lib:format("hand shake failed, Reason:~p~n", [Reason])}
                     end;
@@ -129,7 +129,15 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({query, From, Ref, {Op, State, Content}}, 
+handle_cast(Msg, State) ->
+    try
+        do_handle_cast(Msg, State)
+    catch Type:Reason:Trace ->
+            logger:error("handle cast:~p error~ntype:~p~nreason:~p~ntace:~p~n", [Msg, Type, Reason, Trace]),
+              {noreply, State}
+    end.
+
+do_handle_cast({query, From, Ref, {Op, State, Content}}, 
             #client{alloc_id = AllocId,
                     requests = Requests,
                     socket = Socket} = Client) ->
@@ -138,13 +146,12 @@ handle_cast({query, From, Ref, {Op, State, Content}},
                        ref = Ref,
                        from = From,
                        state = State},
-    logger:error("send :~p~n", [ReqData]),
     ok = gen_tcp:send(Socket, ReqData),
     {noreply, Client#client{alloc_id = AllocId + 1,
                             requests = Requests#{AllocId => Request}}};
 
-handle_cast(Msg, State) ->
-    logger:error("un handle message:~p~n", [Msg]),
+do_handle_cast(Msg, State) ->
+    logger:error("un handle cast:~p~n", [Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -157,8 +164,15 @@ handle_cast(Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
-    logger:error("receive :~p~n", [Data]),
+handle_info(Msg, State) ->
+    try
+        do_handle_info(Msg, State)
+    catch Type:Reason:Trace ->
+            logger:error("handle info:~p error~ntype:~p~nreason:~p~ntace:~p~n", [Msg, Type, Reason, Trace]),
+              {noreply, State}
+    end.
+
+do_handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
     {Status, ReqId, Content} = ignite_query:on_response(Data),
     case maps:get(ReqId, Requests, undefined) of
         undefined ->
@@ -167,7 +181,6 @@ handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
             case Status of
                 on_query_success ->
                     try
-                        logger:error("Content is ~p~n", [Content]),
                         Value = ignite_op_response_handler:on_response(OpCdoe, State, Content),
                         erlang:send(From, {on_query_success, Ref, Value})
                     catch
@@ -180,31 +193,12 @@ handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
             end
     end;
 
-handle_info(recv, #client{socket = Socket, buffer = Buffer} = State) ->
-    erlang:send_after(10, self(), recv),
-    case gen_tcp:recv(Socket, 0, 10) of
-        {error, _} ->
-            {noreply, State};
-        {ok, Packet} ->
-            logger:error("recv data:~p~n", [Packet]),
-            Buffer2 = <<Buffer/binary, Packet/binary>>,
-            Len = erlang:byte_size(Buffer2),
-            if Len < 4 ->
-                   {noreply, State#client{buffer = Buffer2}};
-               true ->
-                   <<MsgLen:?sint_spec, Body/binary>> = Buffer2,
-                   if MsgLen > Len - 4 ->
-                        {noreply, State#client{buffer = Buffer2}};
-                      true ->
-                          <<Msg:MsgLen/binary, BufferRest/binary>> = Body,
-                          erlang:send(self(), {tcp, Msg}),
-                          {noreply, State#client{buffer = BufferRest}}
-                   end
-            end
-    end;
+do_handle_info({'DOWN', _, process, _, Reason}, State) ->
+    logger:error("recver down, this client will auto close~nReason:~p~n", [Reason]),
+    {stop, {recver_down, Reason}, State};
 
-handle_info(Info, State) ->
-    logger:error("un handle message:~p~n", [Info]),
+do_handle_info(Info, State) ->
+    logger:error("un handle info:~p~n", [Info]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -244,7 +238,7 @@ get(Cache, Key) ->
     Ref = erlang:make_ref(),
     From = self(),
     Query = ignite_kv_query:get(Cache, Key),
-    gen_server:cast(thin_client, {query, From, Ref, Query}),
+    wpool:cast(ignite, {query, From, Ref, Query}, random_worker),
     receive {on_query_success, Ref, Value} ->
         Value
     after 10000 -> ok

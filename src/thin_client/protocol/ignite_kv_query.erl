@@ -26,7 +26,7 @@
 -include("type_binary_spec.hrl").
 
 get(Cache, Key) ->
-    {?OP_CACHE_GET, write_key(Cache, Key)}.
+    {?OP_CACHE_GET, undefined, write_key(Cache, Key)}.
 
 get_all(Cache, Keys) ->
     Len = erlang:length(Keys),

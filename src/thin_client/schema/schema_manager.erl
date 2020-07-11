@@ -13,9 +13,10 @@
 -include("schema.hrl").
 -define(SERVER, ?MODULE).
 
-
 %% API
--export([start_link/0]).
+-export([start_link/0,
+         register_type/1, 
+         get_type/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -24,9 +25,6 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
-
--export([register_type/1, get_type/1]).
-
 
 -record(state, {}).
 
@@ -60,8 +58,18 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    ets:new(?MODULE, [set, public, named_table, {keypos, #type_schema.type_id}, {read_concurrency, true}]),
-    lists:foreach(fun(Type) -> register_type(Type) end, default_types()),
+    ets:new(?MODULE, [set, protected, named_table, {keypos, #type_schema.type_id}, {read_concurrency, true}]),
+    lists:foreach(fun(Type) -> inner_register_type(Type) end, default_types()),
+    {ok, SchemaDir} = application:get_env(erl_ignite, schema),
+    filelib:fold_files(SchemaDir,
+                       ".*.cfg", 
+                       true,
+                       fun(File, _) -> 
+                               logger:error("find file:~p~n", [File]),
+                               {ok, Types} = file:consult(File),
+                               lists:foreach(fun(Type) -> inner_register_type(Type) end, Types)
+                       end,
+                       undefined),
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -92,6 +100,10 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({register_type, Type}, State) ->
+    inner_register_type(Type),
+    {noreply, State};
+    
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -150,17 +162,14 @@ default_types() ->
                           constructor = fun([Bin]) -> erlang:binary_to_term(Bin) end},
     [Term].
 
-%%%===================================================================
-%%% API functions
-%%%===================================================================
-register_type(#type_register{type_name = TypeName,
-                             type_type = TypeType,
-                             type_tag = TypeTag,
-                             version = Version,
-                             schema_format = SchemaFormat,
-                             fields  = FieldDefs,
-                             constructor = Constructor,
-                             on_upgrades = OnUpgrades}) -> 
+inner_register_type(#type_register{type_name = TypeName,
+                                   type_type = TypeType,
+                                   type_tag = TypeTag,
+                                   version = Version,
+                                   schema_format = SchemaFormat,
+                                   fields  = FieldDefs,
+                                   constructor = Constructor,
+                                   on_upgrades = OnUpgrades}) -> 
     TypeId = utils:hash_name(TypeName),
     SchemaId = utils:calculate_schemaId([Def#field.name || Def <- FieldDefs]),
     case TypeType of
@@ -199,13 +208,18 @@ register_type(#type_register{type_name = TypeName,
                           on_upgrades = OnUpgrades},
     ets:insert(?MODULE, Schema);
 
-register_type(#enum_register{type_name = TypeName, values = Values}) ->
+inner_register_type(#enum_register{type_name = TypeName, values = Values}) ->
     TypeId = utils:hash_name(TypeName),
     Schema = #enum_schema{type_id = TypeId,
                           type_name = TypeName,
                           values = Values},
     ets:insert(?MODULE, Schema).
-    
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+register_type(Type) ->
+    gen_server:cast(?MODULE, {register_type, Type}).
 
 get_type(TypeName) when is_list(TypeName) ->
     TypeId = utils:hash_name(TypeName),

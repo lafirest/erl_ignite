@@ -5,7 +5,8 @@
   {mod, {erl_ignite_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    worker_pool
    ]},
   {env,[]},
   {modules, []},
