@@ -154,7 +154,7 @@ inner_read(?wrapped_data_code, <<Len:?sint_spec, Binary:Len/binary, Offset:?sint
             Value = read_value(Body, Option),
             {Value, Bin};
         _ ->
-            #wrapped{binary = Binary, offset = Offset}
+            {#wrapped{binary = Binary, offset = Offset}, Bin}
     end;
 
 inner_read(?binary_enum_code, <<_:?sint_spec, Value:?sint_spec, Bin/binary>>, _) -> {Value, Bin};
@@ -269,11 +269,6 @@ make_object(undefined, map, _, Keys, Values) ->
 make_object(Constructor, _, _, _, Values) ->
     Constructor(Values).
 
-
-parse_options(fast_term, Option) -> Option#read_option{fast_term = true};
-parse_options(keep_wrapped, Option) -> Option#read_option{keep_wrapped = true};
-parse_options(keep_binary_object, Option) -> Option#read_option{keep_binary_object = true}.
-
 %%---- API functions-------------------------------------------------------------------
 read_value(Bin) -> read_value(Bin, []).
 
@@ -281,6 +276,9 @@ read_value(Bin, Options) -> erlang:element(1, read(Bin, Options)).
 
 read(Bin) -> read(Bin, []).
 
+read(Bin, #read_option{} = Option) ->
+    inner_read(Bin, Option);
+
 read(Bin, Options) ->
-    Option = lists:foldl(fun(E, Acc) -> parse_options(E, Acc) end, #read_option{}, Options),
+    Option = utils:parse_read_options(Options),
     inner_read(Bin, Option).

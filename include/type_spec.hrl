@@ -10,19 +10,26 @@
 -define(ATOM_TYPE_NAME, "ErlangAtom").
 
 %%----Encoder Options-----------------------------------------------------------
--type write_options() :: fast_term.  %% use byte array encoder term
+-type write_option() :: fast_term.  %% use byte array encoder term
+
+-type write_options() :: list(write_option()).  
+
 -record(write_option,
         {fast_term = false :: boolean()}).
 
 %%----Decoder Options-----------------------------------------------------------
--type read_options() :: fast_term 
+-type read_option() :: fast_term 
                     | keep_wrap
-                    | keep_binary_object.
+                    | keep_binary_object
+                    | {timeout, infinity | non_neg_integer()}.
+
+-type read_options() :: list(read_option()).
 
 -record(read_option,
         {fast_term = false :: boolean(),
          keep_wrapped = false :: boolean(),
-         keep_binary_object = false :: boolean()}).
+         keep_binary_object = false :: boolean(),
+         timeout = infinity }).
 
 -record(wrapped,
         {binary :: binary(),
@@ -32,3 +39,12 @@
         {body          :: binary(),
          schemas       :: #{integer() => non_neg_integer()}
         }).
+
+-type async_query_callback() :: undefined  %% sync
+                            | ignore
+                            | {function, fun()}
+                            | {message, pid(), atom()}.
+
+-type query_options() :: #{write => write_options(),
+                           read => read_options(),
+                           async => async_query_callback()}.

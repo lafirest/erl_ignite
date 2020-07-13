@@ -1,6 +1,27 @@
 -module(ignite_op_response_handler).
 
--export([on_response/3]).
+-export([get/2, 
+         get_all/2,
+         put/2,
+         put_all/2,
+         contains_key/2,
+         contains_keys/2,
+         get_and_put/2,
+         get_and_replace/2,
+         get_and_remove/2,
+         put_if_absent/2,
+         get_put_if_absent/2,
+         replace/2,
+         replace_if_equals/2,
+         clear/2,
+         clear_key/2,
+         clear_keys/2,
+         get_size/2,
+         remove_key/2,
+         remove_if_equals/2,
+         remove_keys/2,
+         remove_all/2,
+         on_response/3]).
 
 -include("operation.hrl").
 -include("type_binary_spec.hrl").
@@ -8,62 +29,50 @@
 -spec on_response(non_neg_integer(), term(), binary()) -> term().
 
 %%----KV Response-------------------------------------------------------------------
-on_response(?OP_CACHE_GET, _, Content) -> 
-    ignite_decoder:read_value(Content);
+get(Content, Option) -> ignite_decoder:read_value(Content, Option).
 
-on_response(?OP_CACHE_GET_ALL, _, <<Len:?sint_spec, Body/binary>>) -> 
-    {ValueR, _} = loop:do_times(fun({PairAcc, BinAcc}) ->
-                                        {Key, BinAcc2} = ignite_decoder:read(BinAcc),
-                                        {Value, BinAcc3} = ignite_decoder:read(BinAcc2),
-                                        {[{Key, Value} | PairAcc], BinAcc3}
+get_all(<<Len:?sint_spec, Body/binary>>, Option) -> 
+    {ValueR, _} = loop:dotimes(fun({PairAcc, BinAcc}) ->
+                                       {Key, BinAcc2} = ignite_decoder:read(BinAcc, Option),
+                                       {Value, BinAcc3} = ignite_decoder:read(BinAcc2, Option),
+                                       {[{Key, Value} | PairAcc], BinAcc3}
                                 end,
                                 Len,
                                 {[], Body}),
-    lists:reverse(ValueR);
+    lists:reverse(ValueR).
 
-on_response(?OP_CACHE_PUT, _, _) -> ok;
-on_response(?OP_CACHE_PUT_ALL, _, _) -> ok;
-on_response(?OP_CACHE_CONTAINS_KEY, _, Content) -> 
-    ignite_decoder:read_value(Content);
+put(_, _) -> ok.
+put_all(_, _) -> ok.
+contains_key(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_CONTAINS_KEYS, _, Content) -> 
-    ignite_decoder:read_value(Content);
+contains_keys(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_GET_AND_PUT, _, Content) -> 
-    ignite_decoder:read_value(Content);
+get_and_put(Content, Option) ->  ignite_decoder:read_value(Content, Option).
 
-on_response(?OP_CACHE_GET_AND_REPLACE, _, Content) -> 
-    ignite_decoder:read_value(Content);
+get_and_replace(Content, Option) -> ignite_decoder:read_value(Content, Option).
 
-on_response(?OP_CACHE_GET_AND_REMOVE, _, Content) -> 
-    ignite_decoder:read_value(Content);
+get_and_remove(Content, Option) -> ignite_decoder:read_value(Content, Option).
 
-on_response(?OP_CACHE_PUT_IF_ABSENT, _, Content) -> 
-    ignite_decoder:read_value(Content);
+put_if_absent(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_GET_AND_PUT_IF_ABSENT, _, Content) -> 
-    ignite_decoder:read_value(Content);
+get_put_if_absent(Content, Option) -> ignite_decoder:read_value(Content, Option).
 
-on_response(?OP_CACHE_REPLACE, _, Content) -> 
-    ignite_decoder:read_value(Content);
+replace(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_REPLACE_IF_EQUALS, _, Content) -> 
-    ignite_decoder:read_value(Content);
+replace_if_equals(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_CLEAR, _, _) -> ok;
-on_response(?OP_CACHE_CLEAR_KEY, _, _) -> ok;
-on_response(?OP_CACHE_CLEAR_KEYS, _, _) -> ok;
-on_response(?OP_CACHE_REMOVE_KEY, _, Content) -> 
-    ignite_decoder:read_value(Content);
+clear(_, _) -> ok.
+clear_key(_, _) -> ok.
+clear_keys(_, _) -> ok.
 
-on_response(?OP_CACHE_REMOVE_IF_EQUALS, _, Content) -> 
-    ignite_decoder:read_value(Content);
+remove_key(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_GET_SIZE, _, Content) -> 
-    ignite_decoder:read_value(Content);
+remove_if_equals(<<Result:?sbyte_spec>>, _) -> utils:from_raw_bool(Result).
 
-on_response(?OP_CACHE_REMOVE_KEYS, _, _) -> ok;
-on_response(?OP_CACHE_REMOVE_ALL, _, _) -> ok;
+get_size(<<Size:?slong_spec, _/binary>>, _) -> Size.
+
+remove_keys(_, _) -> ok.
+remove_all(_, _) -> ok.
 
 %%----SQL Response-------------------------------------------------------------------
 on_response(?OP_QUERY_SQL, _, <<CursorId:?slong_spec, Row:?sint_spec, Bin/binary>>) ->  

@@ -30,10 +30,9 @@
 -type request_id() :: non_neg_integer().
 
 -record(request,
-        {op_code :: request_id(),
-         ref :: reference(),
-         from :: pid(),
-         state :: term()}).
+        {from :: pid(),
+         ref :: reference()
+        }).
 
 -type requests() :: #{request_id() => #request{}}.
 
@@ -137,15 +136,12 @@ handle_cast(Msg, State) ->
               {noreply, State}
     end.
 
-do_handle_cast({query, From, Ref, {Op, State, Content}}, 
+do_handle_cast({query, From, Ref, {Op, Content}}, 
             #client{alloc_id = AllocId,
                     requests = Requests,
                     socket = Socket} = Client) ->
     ReqData = ignite_query:make_request(AllocId, Op, Content),
-    Request = #request{op_code = Op, 
-                       ref = Ref,
-                       from = From,
-                       state = State},
+    Request = #request{from = From, ref = Ref},
     ok = gen_tcp:send(Socket, ReqData),
     {noreply, Client#client{alloc_id = AllocId + 1,
                             requests = Requests#{AllocId => Request}}};
@@ -177,20 +173,9 @@ do_handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
     case maps:get(ReqId, Requests, undefined) of
         undefined ->
             {noreply, Client};
-        #request{ref = Ref, from = From, op_code = OpCdoe, state = State} ->
-            case Status of
-                on_query_success ->
-                    try
-                        Value = ignite_op_response_handler:on_response(OpCdoe, State, Content),
-                        erlang:send(From, {on_query_success, Ref, Value})
-                    catch
-                        Type:Reason ->
-                            logger:error("parse error:~p ~p~n", [Type, Reason])
-                    end,
-                    {noreply, Client#client{requests = maps:remove(ReqId, Requests)}};
-                _ ->
-                    {noreply, Client}
-            end
+        #request{ref = Ref, from = From} ->
+            erlang:send(From, {Status, Ref, Content}),
+            {noreply, Client#client{requests = maps:remove(ReqId, Requests)}}
     end;
 
 do_handle_info({'DOWN', _, process, _, Reason}, State) ->

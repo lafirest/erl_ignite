@@ -288,11 +288,12 @@ get_field_pairs(Types, map, FieldKeys, Map) ->
     Values = [maps:get(OrderKey, Map) || OrderKey <- FieldKeys],
     lists:zip(Types, Values).
 
-parse_options(fast_term, Option) -> Option#write_option{fast_term = true}.
-
 %%---- API functions-------------------------------------------------------------------
 write(Value, Bin) -> write(Value, Bin, []).
 
+write(Value, Bin, #write_option{} = Option) -> 
+    inner_write(Value, Bin, Option);
+
 write(Value, Bin, Options) -> 
-    Option = lists:foldl(fun(E, Acc) -> parse_options(E, Acc) end, #write_option{}, Options),
+    Option = utils:parse_write_options(Options),
     inner_write(Value, Bin, Option).
