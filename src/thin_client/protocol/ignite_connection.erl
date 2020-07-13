@@ -12,7 +12,6 @@ hand_shake(Major, Minor, Patch, Username, Password) ->
           Minor:?sshort_spec, 
           Patch:?sshort_spec, 
           ?client_code:?sbyte_spec>>,
-
     Content1 = ignite_encoder:write({string, Username}, Content),
     Content2 = ignite_encoder:write({string, Password}, Content1),
     TotalLen = erlang:byte_size(Content2),

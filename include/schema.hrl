@@ -49,17 +49,17 @@
                     | wrapped
                     | {binary_enum, string()}.
 
--type map_key_type()      :: atom() | string() | binary().
+-type map_key_type() :: atom() | string() | binary().
 -type upgrade_hook() :: fun((term()) -> term()).
 -type constructor() :: fun((list(term())) -> term()).
--type enum_info() :: {atom(), integer(), string()}.
+-type enum_info() :: {atom(), integer(), string()}. %% {Tag, Value, Name}
 
--record(field,
-        {name :: string(),
-         type :: field_type(),
-         %% key default(undefined) for tuple, others for map
-         key  :: undefined | map_key_type()
-        }).
+-type field_info() ::
+    #{name := string(),
+      type := field_type(),
+      %% key default(undefined) for tuple, others for map
+      key  => map_key_type()
+     }.
 
 -record(type_schema,
         {type_id        :: integer(),
@@ -85,21 +85,24 @@
          values         :: list(enum_info())
         }).
 
--record(type_register,
-        {type_name     :: string(),
-         type_type     :: type_type(),
-         type_tag      :: undefined | atom(), %% default(undefined) for map, atom() for tuple
-         version       :: version(),
-         schema_format :: schema_format(),
-         fields        :: list(#field{}),
-         constructor   :: undefined | constructor(),
-         on_upgrades   :: list(upgrade_hook())
-        }).
+-type type_register() ::
+    #{name          := string(),
+      type          := type_type(),
+      version       := version(),
+      schema_format := schema_format(),
+      fields        := list(field_info()),
+      type_tag    => atom(),
+      name_tag    => atom(),
+      constructor => constructor(),
+      on_upgrades => list(upgrade_hook())
+     }.
 
--record(enum_register,
-        {type_name     :: string(),
-         values        :: list(enum_info())}).
+-type enum_register() ::
+    #{name     := string(),
+      enums    := list(enum_info())}.
 
 -define(ENUM_ATOM_POS, 1).
 -define(ENUM_VALUE_POS, 2).
 -define(ENUM_NAME_POS, 3).
+
+-define(COMPLEX_OBJECT_HEAD_OFFSET, 24).

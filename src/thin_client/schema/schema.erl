@@ -106,5 +106,3 @@ write(#{type_name := TypeName,
                  <<_/binary, 0:?sbyte_spec, SchemaCnt:?sint_spec>>,
                  Schemas)
     ].
-
-

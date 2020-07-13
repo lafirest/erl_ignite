@@ -148,33 +148,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec default_types() -> list(#type_register{}).
+-spec default_types() -> list(type_register()).
 default_types() ->
-    Term = #type_register{type_name = "ErlangTerm",
-                          type_type = tuple,
-                          type_tag = term,
-                          version = 1,
-                          schema_format = compact,
-                          fields = [
-                                    #field{name = "Value", type = byte_array}
-                                   ],
-                          on_upgrades = [],
-                          constructor = fun([Bin]) -> erlang:binary_to_term(Bin) end},
+    Term = #{name              => "ErlangTerm",
+             type              => tuple,
+             type_tag          => term,
+             version           => 1,
+             schema_format     => compact,
+             fields            => [
+                                    #{name => "Value", type => byte_array}
+                                  ],
+             constructor       => fun([Bin]) -> erlang:binary_to_term(Bin) end},
     [Term].
 
-inner_register_type(#type_register{type_name = TypeName,
-                                   type_type = TypeType,
-                                   type_tag = TypeTag,
-                                   version = Version,
-                                   schema_format = SchemaFormat,
-                                   fields  = FieldDefs,
-                                   constructor = Constructor,
-                                   on_upgrades = OnUpgrades}) -> 
+inner_register_type(#{name := TypeName,
+                      type := TypeType,
+                      version := Version,
+                      schema_format := SchemaFormat,
+                      fields  := FieldDefs} = Register) ->
+    TypeTag = maps:get(type_tag, Register, undefined),
+    Constructor = maps:get(constructor, Register, undefined),
+    OnUpgrades = maps:get(on_upgrades, Register, []),
     TypeId = utils:hash_name(TypeName),
-    SchemaId = utils:calculate_schemaId([Def#field.name || Def <- FieldDefs]),
+    SchemaId = utils:calculate_schemaId([Name || #{name := Name} <- FieldDefs]),
     case TypeType of
         tuple ->
-            FieldDataR = lists:foldl(fun(#field{name = Name, type = Type}, DataAcc) ->
+            FieldDataR = lists:foldl(fun(#{name := Name, type := Type}, DataAcc) ->
                                              FieldType = Type,
                                              FieldId = utils:hash_name(Name),
                                              [{FieldType, FieldId} | DataAcc]
@@ -184,7 +183,7 @@ inner_register_type(#type_register{type_name = TypeName,
             {FieldTypes, FieldIdOrder} = lists:unzip(lists:reverse(FieldDataR)),
             FieldKeys = undefined;
         _ -> 
-            FieldDataR = lists:foldl(fun(#field{name = Name, type = Type, key = Key}, DataAcc) ->
+            FieldDataR = lists:foldl(fun(#{name := Name, type := Type, key := Key}, DataAcc) ->
                                              FieldType = Type,
                                              FieldId = utils:hash_name(Name),
                                              [{FieldType, FieldId, Key} | DataAcc]
@@ -208,11 +207,11 @@ inner_register_type(#type_register{type_name = TypeName,
                           on_upgrades = OnUpgrades},
     ets:insert(?MODULE, Schema);
 
-inner_register_type(#enum_register{type_name = TypeName, values = Values}) ->
+inner_register_type(#{name := TypeName, enums := Enums}) ->
     TypeId = utils:hash_name(TypeName),
     Schema = #enum_schema{type_id = TypeId,
                           type_name = TypeName,
-                          values = Values},
+                          values = Enums},
     ets:insert(?MODULE, Schema).
 
 %%%===================================================================

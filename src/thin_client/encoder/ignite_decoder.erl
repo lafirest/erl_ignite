@@ -1,49 +1,49 @@
 -module(ignite_decoder).
 
--export([read/1, read_value/1]).
+-export([read/1, 
+         read/2, 
+         read_value/1,
+         read_value/2]).
 
 -include("schema.hrl").
+-include("type_spec.hrl").
 -include("type_binary_spec.hrl").
 
 %%----read -------------------------------------------------------------------
-read_value(Bin) ->
-    {Value, _} = read(Bin),
-    Value.
+inner_read(<<Code:?sbyte_spec, Bin/binary>>, Option) -> inner_read(Code, Bin, Option).
 
-read(<<Code:?sbyte_spec, Bin/binary>>) -> read(Code, Bin).
+inner_read(?byte_code, <<Byte:?sbyte_spec, Bin/binary>>, _) -> {Byte, Bin};
 
-read(?byte_code, <<Byte:?sbyte_spec, Bin/binary>>) -> {Byte, Bin};
+inner_read(?short_code, <<Short:?sshort_spec, Bin/binary>>, _) -> {Short, Bin};
 
-read(?short_code, <<Short:?sshort_spec, Bin/binary>>) -> {Short, Bin};
+inner_read(?int_code, <<Int:?sint_spec, Bin/binary>>, _) -> {Int, Bin};
 
-read(?int_code, <<Int:?sint_spec, Bin/binary>>) -> {Int, Bin};
+inner_read(?long_code, <<Long:?slong_spec, Bin/binary>>, _) -> {Long, Bin};
 
-read(?long_code, <<Long:?slong_spec, Bin/binary>>) -> {Long, Bin};
+inner_read(?float_code, <<Float:?sfloat_spec, Bin/binary>>, _) -> {Float, Bin};
 
-read(?float_code, <<Float:?sfloat_spec, Bin/binary>>) -> {Float, Bin};
+inner_read(?double_code, <<Double:?sdouble_spec, Bin/binary>>, _) -> {Double, Bin};
 
-read(?double_code, <<Double:?sdouble_spec, Bin/binary>>) -> {Double, Bin};
+inner_read(?char_code, <<Char?char_spec, Bin/binary>>, _) -> {Char, Bin};
 
-read(?char_code, <<Char?char_spec, Bin/binary>>) -> {Char, Bin};
-
-read(?bool_code, <<Value:?bool_spec, Bin/binary>>) -> 
+inner_read(?bool_code, <<Value:?bool_spec, Bin/binary>>, _) -> 
     {utils:from_raw_bool(Value), Bin};
 
-read(?null_code, Bin) -> {undefined, Bin};
+inner_read(?null_code, Bin, _) -> {undefined, Bin};
 
-read(?string_code, <<Len:?sint_spec, String:Len/binary, Bin/binary>>) ->
+inner_read(?string_code, <<Len:?sint_spec, String:Len/binary, Bin/binary>>, _) ->
     {String, Bin};
 
-read(?uuid_code, <<UUID:16/binary, Bin/binary>>) -> {UUID, Bin};
+inner_read(?uuid_code, <<UUID:16/binary, Bin/binary>>, _) -> {UUID, Bin};
 
 %% I think msec_fraction_in_nsecs is unnecessary
-read(?timestamp_code, <<Msecs:?slong_spec, _:?sint_spec, Bin/binary>>) -> {qdate:to_date(Msecs div 1000), Bin};
+inner_read(?timestamp_code, <<Msecs:?slong_spec, _:?sint_spec, Bin/binary>>, _) -> {qdate:to_date(Msecs div 1000), Bin};
 
-read(?date_code, <<Msecs:?slong_spec, Bin/binary>>) -> {qdate:to_date(Msecs div 1000), Bin};
+inner_read(?date_code, <<Msecs:?slong_spec, Bin/binary>>, _) -> {qdate:to_date(Msecs div 1000), Bin};
 
-read(?time_code, <<Value:?slong_spec, Bin/binary>>) -> {calendar:seconds_to_time(Value div 1000), Bin};
+inner_read(?time_code, <<Value:?slong_spec, Bin/binary>>, _) -> {calendar:seconds_to_time(Value div 1000), Bin};
 
-read(?enum_code, <<TypeId:?sint_spec, RawValue:?sint_spec, Bin/binary>>) -> 
+inner_read(?enum_code, <<TypeId:?sint_spec, RawValue:?sint_spec, Bin/binary>>, _) -> 
     Value =
     case schema_manager:get_type(TypeId) of 
         undefined -> RawValue;
@@ -54,41 +54,45 @@ read(?enum_code, <<TypeId:?sint_spec, RawValue:?sint_spec, Bin/binary>>) ->
     {Value, Bin};
 
 %% for performance, byte array shoud be binary, not byte list
-read(?byte_array_code, <<Len:?sint_spec, ByteArray:Len/binary, Bin/binary>>) -> {ByteArray, Bin};
+inner_read(?byte_array_code, <<Len:?sint_spec, ByteArray:Len/binary, Bin/binary>>, #read_option{fast_term = FaseTerm}) -> 
+    case FaseTerm of
+        false -> {ByteArray, Bin};
+        _ -> {erlang:binary_to_term(ByteArray), Bin}
+    end;
 
-read(?short_array_code, Bin) -> read_array_with_type(short, Bin); 
+inner_read(?short_array_code, Bin, Option) -> read_array_with_type(short, Bin, Option); 
 
-read(?int_array_code, Bin) -> read_array_with_type(int, Bin); 
+inner_read(?int_array_code, Bin, Option) -> read_array_with_type(int, Bin, Option); 
 
-read(?long_array_code, Bin) -> read_array_with_type(long, Bin); 
+inner_read(?long_array_code, Bin, Option) -> read_array_with_type(long, Bin, Option); 
 
-read(?float_array_code, Bin) -> read_array_with_type(float, Bin); 
+inner_read(?float_array_code, Bin, Option) -> read_array_with_type(float, Bin, Option); 
 
-read(?double_array_code, Bin) -> read_array_with_type(double, Bin); 
+inner_read(?double_array_code, Bin, Option) -> read_array_with_type(double, Bin, Option); 
 
-read(?char_array_code, Bin) -> read_array_with_type(char, Bin); 
+inner_read(?char_array_code, Bin, Option) -> read_array_with_type(char, Bin, Option); 
 
-read(?bool_array_code, Bin) -> read_array_with_type(bool, Bin); 
+inner_read(?bool_array_code, Bin, Option) -> read_array_with_type(bool, Bin, Option); 
 
-read(?string_array_code, Bin) -> read_array(Bin);
+inner_read(?string_array_code, Bin, Option) -> read_array(Bin, Option);
 
-read(?uuid_array_code, Bin) -> read_array(Bin);
+inner_read(?uuid_array_code, Bin, Option) -> read_array(Bin, Option);
 
-read(?timestamp_code, Bin) -> read_array(Bin);
+inner_read(?timestamp_code, Bin, Option) -> read_array(Bin, Option);
 
-read(?date_array_code, Bin) -> read_array(Bin);
+inner_read(?date_array_code, Bin, Option) -> read_array(Bin, Option);
 
-read(?time_array_code, Bin) ->  read_array(Bin);
+inner_read(?time_array_code, Bin, Option) ->  read_array(Bin, Option);
 
-read(?object_array_code, <<_:?sint_spec, Bin/binary>>) -> read_array(Bin);
+inner_read(?object_array_code, <<_:?sint_spec, Bin/binary>>, Option) -> read_array(Bin, Option);
 
-read(?map_code, <<Len:?sint_spec, MapType:?sbyte_spec, Bin/binary>>) ->
+inner_read(?map_code, <<Len:?sint_spec, MapType:?sbyte_spec, Bin/binary>>, Option) ->
     {Pairs, Bin2} = 
     loop:dotimes(fun({PairAcc, BinAcc}) ->
-                    {Key, BinAcc2} = read(BinAcc),
-                    {Value, BinAcc3} = read(BinAcc2),
-                    Pair = {Key, Value},
-                    {[Pair | PairAcc], BinAcc3}
+                         {Key, BinAcc2} = inner_read(BinAcc, Option),
+                         {Value, BinAcc3} = inner_read(BinAcc2, Option),
+                         Pair = {Key, Value},
+                         {[Pair | PairAcc], BinAcc3}
                  end, 
                  Len,
                  {[], Bin}),
@@ -98,10 +102,10 @@ read(?map_code, <<Len:?sint_spec, MapType:?sbyte_spec, Bin/binary>>) ->
      end,
      Bin2};
 
-read(?collection_code, <<Len:?sint_spec, Type:?sbyte_spec, Bin/binary>>) ->
+inner_read(?collection_code, <<Len:?sint_spec, Type:?sbyte_spec, Bin/binary>>, Option) ->
     {ValueR, Bin2} = 
     loop:dotimes(fun({ValueAcc, BinAcc}) -> 
-                         {Value, BinAcc2} = read(BinAcc),
+                         {Value, BinAcc2} = inner_read(BinAcc, Option),
                          {[Value | ValueAcc], BinAcc2}
                  end,
                  Len,
@@ -116,9 +120,9 @@ read(?collection_code, <<Len:?sint_spec, Type:?sbyte_spec, Bin/binary>>) ->
     end,
     {Value, Bin2};
 
-read(?enum_array_code, <<_:?sint_spec, Bin/binary>>) -> read_array(Bin);
+inner_read(?enum_array_code, <<_:?sint_spec, Bin/binary>>, Option) -> read_array(Bin, Option);
 
-read(?complex_object_code, 
+inner_read(?complex_object_code, 
      <<Version:?sbyte_spec, 
        Flag:?sshort_spec,
        TypeId:?sint_spec,
@@ -126,22 +130,73 @@ read(?complex_object_code,
        Len:?sint_spec,
        _:?sint_spec,
        SchemaOffsetT:?sint_spec,
-       Body:(Len - 24)/binary,
-       Bin/binary>>) ->
-    SchemaOffset = SchemaOffsetT - 24,
+       Body:(Len - ?COMPLEX_OBJECT_HEAD_OFFSET)/binary,
+       Bin/binary>>,
+     #read_option{keep_binary_object = KeepBinaryObject} = Option) ->
+    SchemaOffset = SchemaOffsetT - ?COMPLEX_OBJECT_HEAD_OFFSET,
     #type_schema{version = NoVersion,
                  type_type = TypeType,
                  type_tag = TypeTag,
                  field_keys = FieldKeys,
+                 field_id_order = FieldIds,
                  constructor = Constructor,
                  on_upgrades = OnUpgrades} = schema_manager:get_type(TypeId),
+    case KeepBinaryObject of
+        false -> Value = read_complex_object(Flag, Body, SchemaOffset, Version, NoVersion, Constructor, OnUpgrades, TypeType, TypeTag, FieldKeys, Option);
+        _ -> Value = read_binary_object(Flag, Body, SchemaOffset, FieldIds, Option)
+    end,
+    {Value, Bin};
+
+inner_read(?wrapped_data_code, <<Len:?sint_spec, Binary:Len/binary, Offset:?sint_spec, Bin/binary>>, #read_option{keep_wrapped = KeepWrapped} = Option) ->
+    case KeepWrapped of
+        false ->
+            <<_:Offset/binary, Body/binary>> = Binary,
+            Value = read_value(Body, Option),
+            {Value, Bin};
+        _ ->
+            #wrapped{binary = Binary, offset = Offset}
+    end;
+
+inner_read(?binary_enum_code, <<_:?sint_spec, Value:?sint_spec, Bin/binary>>, _) -> {Value, Bin};
+
+%%----Specified read -------------------------------------------------------------------
+inner_read(byte, <<Byte:?sbyte_spec, Bin/binary>>, _) -> {Byte, Bin};
+inner_read(short, <<Short:?sshort_spec, Bin/binary>>, _) -> {Short, Bin};
+inner_read(int, <<Int:?sint_spec, Bin/binary>>, _) -> {Int, Bin};
+inner_read(long, <<Long:?slong_spec, Bin/binary>>, _) -> {Long, Bin};
+inner_read(float, <<Float:?sfloat_spec, Bin/binary>>, _) -> {Float, Bin};
+inner_read(double, <<Double:?sdouble_spec, Bin/binary>>, _) -> {Double, Bin};
+inner_read(char, <<Char?char_spec, Bin/binary>>, _) -> {Char, Bin};
+inner_read(bool, <<Bool:?bool_spec, Bin/binary>>, _) -> {utils:from_raw_bool(Bool), Bin}.
+
+read_array_with_type(Type, <<Len:?sint_spec, Bin/binary>>, Option) -> 
+    {Values, Bin2} =
+    loop:dotimes(fun({ValueAcc, BinAcc}) -> 
+                         {Value, BinAcc2} = inner_read(Type, BinAcc, Option),
+                         {[Value | ValueAcc], BinAcc2}
+                 end,
+                 Len,
+                 {[], Bin}),
+    {lists:reverse(Values), Bin2}.
+
+read_array(<<Len:?sint_spec, Bin/binary>>, Option) -> 
+    {Values, Bin2} =
+    loop:dotimes(fun({ValueAcc, BinAcc}) -> 
+                         {Value, BinAcc2} = inner_read(BinAcc, Option),
+                         {[Value | ValueAcc], BinAcc2}
+                 end,
+                 Len,
+                 {[], Bin}),
+    {lists:reverse(Values), Bin2}.
+
+read_complex_object(Flag, Body, SchemaOffset, Version, NoVersion, Constructor, OnUpgrades, TypeType, TypeTag, FieldKeys, Option) ->
     case has_schema(Flag) of
         false ->  OriginValues = [];
         _ ->
             %% read all values
             <<ValueBody:SchemaOffset/binary, _/binary>> = Body, 
             OriginValues = loop:while(fun({ValueAcc, BinAcc}) -> 
-                                              {Value, BinAcc2} = read(BinAcc),
+                                              {Value, BinAcc2} = inner_read(BinAcc, Option),
                                               ValueAcc2 = [Value | ValueAcc],
                                               if BinAcc2 =:= <<>> -> lists:reverse(ValueAcc2);
                                                  true -> {true, {ValueAcc2, BinAcc2}}
@@ -162,47 +217,38 @@ read(?complex_object_code,
     end,
 
     %% make object 
-    Object = make_object(Constructor, TypeType, TypeTag, FieldKeys, Values),
-    {Object, Bin};
+    make_object(Constructor, TypeType, TypeTag, FieldKeys, Values).
 
-read(?wrapped_data_code, <<Len:?sint_spec, Binary:Len/binary, Offset:?sint_spec, Bin/binary>>) ->
-    <<_:Offset/binary, Body/binary>> = Binary,
-    Value = read_value(Body),
-    {Value, Bin};
-%    {{wrapped, Binary, Offset}, Bin};
+read_binary_object(Flag, Body, SchemaOffset, FieldIds, Option) ->
+    Len = erlang:byte_size(Body),
+    FieldCnt = erlang:length(FieldIds),
+    SchemaData = erlang:binary_part(Body, SchemaOffset, Len - SchemaOffset),
+    OffsetType = get_offset_type(Flag),
+    case is_compact_footer(Flag) of
+        true ->
+            {OffsetR ,_} = 
+            loop:dotimes(fun({OffsetAcc, DataAcc}) -> 
+                                 {Offset, DataAc2} = inner_read(OffsetType, DataAcc, Option),
+                                 {[Offset - ?COMPLEX_OBJECT_HEAD_OFFSET | OffsetAcc], DataAc2}
+                         end,
+                         FieldCnt,
+                         {[], SchemaData}),
+            Offsets = lists:reverse(OffsetR),
+            Fields = lists:zip(FieldIds, Offsets),
+            Schemas = maps:from_list(Fields);
+        _ ->
+            {Fields ,_} = 
+            loop:dotimes(fun({FieldAcc, <<FieldId:?sint_spec, DataAcc2/binary>>}) -> 
+                                 {Offset, DataAc3} = inner_read(OffsetType, DataAcc2, Option),
+                                 {[{FieldId, Offset - ?COMPLEX_OBJECT_HEAD_OFFSET} | FieldAcc], DataAc3}
+                         end,
+                         FieldCnt,
+                         {[], SchemaData}),
+            Schemas = maps:from_list(Fields)
+    end,
+    #binary_object{body = Body, schemas = Schemas}.
 
-read(?binary_enum_code, <<_:?sint_spec, Value:?sint_spec, Bin/binary>>) -> {Value, Bin};
-
-%%----Specified read -------------------------------------------------------------------
-read(byte, <<Byte:?sbyte_spec, Bin/binary>>) -> {Byte, Bin};
-read(short, <<Short:?sshort_spec, Bin/binary>>) -> {Short, Bin};
-read(int, <<Int:?sint_spec, Bin/binary>>) -> {Int, Bin};
-read(long, <<Long:?slong_spec, Bin/binary>>) -> {Long, Bin};
-read(float, <<Float:?sfloat_spec, Bin/binary>>) -> {Float, Bin};
-read(double, <<Double:?sdouble_spec, Bin/binary>>) -> {Double, Bin};
-read(char, <<Char?char_spec, Bin/binary>>) -> {Char, Bin};
-read(bool, <<Bool:?bool_spec, Bin/binary>>) -> {utils:from_raw_bool(Bool), Bin}.
-
-read_array_with_type(Type, <<Len:?sint_spec, Bin/binary>>) -> 
-    {Values, Bin2} =
-    loop:dotimes(fun({ValueAcc, BinAcc}) -> 
-                    {Value, BinAcc2} = read(Type, BinAcc),
-                    {[Value | ValueAcc], BinAcc2}
-                 end,
-                 Len,
-                 {[], Bin}),
-    {lists:reverse(Values), Bin2}.
-
-read_array(<<Len:?sint_spec, Bin/binary>>) -> 
-    {Values, Bin2} =
-    loop:dotimes(fun({ValueAcc, BinAcc}) -> 
-                    {Value, BinAcc2} = read(BinAcc),
-                    {[Value | ValueAcc], BinAcc2}
-                 end,
-                 Len,
-                 {[], Bin}),
-    {lists:reverse(Values), Bin2}.
-
+%%---- Internal functions-------------------------------------------------------------------
 has_schema(Flag) -> Flag band ?HAS_SCHEMA.
 
 get_offset_type(Flag) ->
@@ -223,3 +269,18 @@ make_object(undefined, map, _, Keys, Values) ->
 make_object(Constructor, _, _, _, Values) ->
     Constructor(Values).
 
+
+parse_options(fast_term, Option) -> Option#read_option{fast_term = true};
+parse_options(keep_wrapped, Option) -> Option#read_option{keep_wrapped = true};
+parse_options(keep_binary_object, Option) -> Option#read_option{keep_binary_object = true}.
+
+%%---- API functions-------------------------------------------------------------------
+read_value(Bin) -> read_value(Bin, []).
+
+read_value(Bin, Options) -> erlang:element(1, read(Bin, Options)).
+
+read(Bin) -> read(Bin, []).
+
+read(Bin, Options) ->
+    Option = lists:foldl(fun(E, Acc) -> parse_options(E, Acc) end, #read_option{}, Options),
+    inner_read(Bin, Option).
