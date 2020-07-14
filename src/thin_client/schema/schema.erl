@@ -5,35 +5,35 @@
 -include("schema.hrl").
 -include("type_binary_spec.hrl").
 
--export([read/1, write/1]).
+-export([read/2, write/2]).
 
-read(<<Exists:?sbyte_spec, Bin/binary>>) ->
+read(<<Exists:?sbyte_spec, Bin/binary>>, ReadOption) ->
     case Exists of
         0 -> undefined;
         _ ->
             <<TypeId:?sint_spec, Body/binary>> = Bin,
-            {TypeName, Body2T} = ignite_reader:read(Body),
-            {AffinityKey, Body2} = ignite_reader:read(Body2T),
+            {TypeName, Body2T} = ignite_decoder:read(Body, ReadOption),
+            {AffinityKey, Body2} = ignite_decoder:read(Body2T, ReadOption),
             <<FieldCount:?sint_spec, Body3/binary>> = Body2,
             {BinaryFields, Body4} = 
             loop:dotimes(fun({FieldAcc, DataAcc}) ->
-                                 {Name, <<FieldTypeHash:?sint_spec,
+                                 {Name, <<FieldTypeCode:?sint_spec,
                                           FieldNameHash:?sint_spec,
-                                          DataAcc3/binary>>} = ignite_reader:read(DataAcc),
+                                          DataAcc3/binary>>} = ignite_decoder:read(DataAcc, ReadOption),
                                  Field = #{name => Name,
-                                           type_hash => FieldTypeHash,
+                                           type_code => FieldTypeCode,
                                            name_hash => FieldNameHash},
                                  {[Field | FieldAcc], DataAcc3}
                          end,
                          FieldCount,
                          {[], Body3}),
-            <<IsEnum:?sbyte_spec, Body5>> = Body4,
+            <<IsEnum:?sbyte_spec, Body5/binary>> = Body4,
             case IsEnum of
                 1 -> 
                     <<EnumCount:?sint_spec, Body6>> = Body5,
                     {Enums, _} =
                     loop:dotimes(fun({PairAcc, DataAcc}) -> 
-                                         {Name, <<Value:?sint_spec, DataAcc3/binary>>} = ignite_reader:read(DataAcc),
+                                         {Name, <<Value:?sint_spec, DataAcc3/binary>>} = ignite_decoder:read(DataAcc, ReadOption),
                                          {[{Name, Value} | PairAcc], DataAcc3}
                                  end,
                                  EnumCount, 
@@ -42,7 +42,7 @@ read(<<Exists:?sbyte_spec, Bin/binary>>) ->
                       type_name => TypeName,
                       enums   => lists:reverse(Enums)};
                 _ ->
-                    <<SchemaCount:?sint_spec, Body6>> = Body5,
+                    <<SchemaCount:?sint_spec, Body6/binary>> = Body5,
                     {Schemas, _} =
                     loop:dotimes(fun({SchemaAcc, <<SchemaId:?sint_spec, FCount:?sint_spec, DataAcc2/binary>>}) -> 
                                          {Fields, DataAcc3} = 
@@ -65,43 +65,45 @@ read(<<Exists:?sbyte_spec, Bin/binary>>) ->
             end
     end.
 
-write(#enum_schema{type_id = TypeId, type_name = TypeName, values = Values}) ->
+write(#enum_schema{type_id = TypeId, type_name = TypeName, values = Values}, WriteOption) ->
     Len = erlang:length(Values),
     [m_identity ||
      ignite_encoder:write({string, TypeName}, <<TypeId:?sint_spec>>),
      unit(<<_/binary, 0:?sint_spec, 1:?sbyte_spec, Len:?sint_spec>>),
      lists:foldl(fun({_Atom, Value, Name}, DataAcc) ->
-                         DataAcc2 = ignite_encoder:write(Name, DataAcc),
+                         DataAcc2 = ignite_encoder:write({string, Name}, DataAcc, WriteOption),
                          <<DataAcc2/binary, Value:?sint_spec>>
                  end, 
                  _,
                  Values),
      unit(<<_/binary, 0:?sint_spec>>)];
 
-
 write(#{type_name := TypeName,
         affinity_key := AffinityKey,
         fields := Fields,
-        schemas := Schemas}) ->
+        schemas := Schemas},
+      WriteOption) ->
     TypeId = utils:hash_name(TypeName),
     FieldCnt = erlang:length(Fields),
     SchemaCnt = erlang:length(Schemas),
     [m_identity ||
-     ignite_encoder:write({string, TypeName}, <<TypeId:?sint_spec>>),
-     ignite_encoder:write({string, AffinityKey}, _),
-     lists:foldl(fun(#{name := Name, type_hash := TypeHash, name_hash := NameHash}, DataAcc) ->
-                         DataAcc2 = ignite_encoder:write({string, Name}, DataAcc),
-                         <<DataAcc2/binary, TypeHash:?sint_spec, NameHash:?sint_spec>>
+     ignite_encoder:write({string, TypeName}, <<TypeId:?sint_spec>>, WriteOption),
+     ignite_encoder:write({string, AffinityKey}, _, WriteOption),
+     lists:foldl(fun(#{name := Name, type_code := TypeCode, name_hash := NameHash}, DataAcc) ->
+                         DataAcc2 = ignite_encoder:write({string, Name}, DataAcc, WriteOption),
+                         <<DataAcc2/binary, TypeCode:?sint_spec, NameHash:?sint_spec>>
                  end,
                  <<_/binary, FieldCnt:?sint_spec>>,
                  Fields),
-     lists:foldl(fun(#{schema_id := SchemaId, fields := FieldIds}, DataAcc) -> 
-                         FieldIdLen = erlang:length(FieldIds),
-                         lists:foldl(fun(FieldId, IDataAcc) -> 
+     lists:foldl(fun(FieldNames, DataAcc) -> 
+                         SchemaId = utils:calculate_schemaId(FieldNames),
+                         FieldIdLen = erlang:length(FieldNames),
+                         lists:foldl(fun(FieldName, IDataAcc) -> 
+                                             FieldId = utils:hash_name(FieldName),
                                              <<IDataAcc/binary, FieldId:?sint_spec>>
                                      end,
                                      <<DataAcc/binary, SchemaId:?sint_spec, FieldIdLen:?sint_spec>>,
-                                     Fields)
+                                     FieldNames)
                  end,
                  <<_/binary, 0:?sbyte_spec, SchemaCnt:?sint_spec>>,
                  Schemas)

@@ -37,9 +37,9 @@ start_link() ->
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
     {ok, Connect} = application:get_env(erl_ignite, connect),
-    {ok, {PoolName, PoolCfgT}} = application:get_env(erl_ignite, pool),
+    {ok, PoolCfgT} = application:get_env(erl_ignite, pool),
     PoolCfg = [{worker, {thin_client, Connect}} | PoolCfgT],
-    wpool:start_pool(PoolName, PoolCfg),
+    wpool:start_pool(ignite, PoolCfg),
     {ok, {{one_for_one, 6, 3600}, [?workerSpec(schema_manager)]}}.
 
 %%====================================================================

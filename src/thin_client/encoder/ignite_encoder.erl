@@ -41,14 +41,22 @@ inner_write({term, Term}, Bin, #write_option{fast_term = FastTerm} = Option) ->
        true -> inner_write({{complex_object, "ErlangTerm"}, {term, Data}}, Bin, Option)
     end;
 
-inner_write({bin_string, String}, Bin, _) ->
-    Len = erlang:byte_size(String), 
-    <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, String/binary>>;
+inner_write({bin_string, String}, Bin, Option) ->
+    case String of
+        undefined -> inner_write(undefined, Bin, Option);
+        _ ->
+            Len = erlang:byte_size(String), 
+            <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, String/binary>>
+    end;
 
-inner_write({string, String}, Bin, _) ->
-    BinString = unicode:characters_to_binary(String),
-    Len = erlang:byte_size(BinString), 
-    <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, BinString/binary>>;
+inner_write({string, String}, Bin, Option) ->
+    case String of
+        undefined -> inner_write(undefined, Bin, Option);
+        _ ->
+            BinString = unicode:characters_to_binary(String),
+            Len = erlang:byte_size(BinString), 
+            <<Bin/binary, ?string_code:?sbyte_spec, Len:?sint_spec, BinString/binary>>
+    end;
 
 inner_write({uuid, UUID}, Bin, _) ->
     <<Bin/binary, ?uuid_code:?sbyte_spec, UUID/binary>>;

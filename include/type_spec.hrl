@@ -17,7 +17,7 @@
 -record(write_option,
         {fast_term = false :: boolean()}).
 
-%%----Decoder Options-----------------------------------------------------------
+%%----Options-----------------------------------------------------------
 -type read_option() :: fast_term 
                     | keep_wrap
                     | keep_binary_object
@@ -45,6 +45,23 @@
                             | {function, fun()}
                             | {message, pid(), atom()}.
 
+-type sql_options() :: atom().
+
 -type query_options() :: #{write => write_options(),
                            read => read_options(),
-                           async => async_query_callback()}.
+                           async => async_query_callback(),
+                           sql => sql_options()}.
+
+-record(sql_query_result,
+        {cursor_id :: integer(),
+         pairs :: list({term(), term()}),
+         has_more :: boolean()}
+       ).
+
+-record(sql_query_fields_result,
+        {cursor_id :: integer(),
+         column    :: non_neg_integer(),
+         names     :: list(string()),
+         rows      :: list(list()),
+         has_more :: boolean()}
+       ).

@@ -4,18 +4,24 @@
 -include("operation.hrl").
 -include("type_binary_spec.hrl").
 
--export([read/1, write/1]).
+-export([read/2, write/2]).
 
-read(<<Backups:?sint_spec, RawMode:?sint_spec, RawCopyOnRead:?sbyte_spec, Bin/binary>>) ->
-    <<?match_string(DataRegionNameLen, DataRegionName),
-      RawEagerTTL:?sbyte_spec,
-      RawStatisticsEnabled:?sbyte_spec,
-      ?match_string(GroupNameLen, GroupName),
-      RawInvalidate:?sbyte_spec,
-      DefaultLockTimeout:?slong_spec,
-      MaxQueryIterators:?sint_spec,
-      ?match_string(NameLen, Name),
-      RawIsOnheapCacheEnabled:?sbyte_spec,
+read(<<RawAtomicityMode:?sint_spec, Backups:?sint_spec, RawMode:?sint_spec, RawCopyOnRead:?sbyte_spec, Bin/binary>>, Option) ->
+    {DataRegionName, Bin2} = ignite_decoder:read(Bin, Option),
+    <<RawEagerTTL:?sbyte_spec,
+      RawStatisticsEnabled:?sbyte_spec, 
+      Bin3/binary>> = Bin2,
+
+    {GroupName, Bin4} = ignite_decoder:read(Bin3, Option),
+
+    <<DefaultLockTimeout:?slong_spec,
+      MaxConcurrentAsyncOperations:?sint_spec,
+      MaxQueryIterators:?sint_spec, 
+      Bin5/binary>> = Bin4,
+
+    {Name, Bin6} = ignite_decoder:read(Bin5, Option),
+
+    <<RawIsOnheapCacheEnabled:?sbyte_spec,
       RawPartitionLossPolicy:?sint_spec,
       QueryDetailMetricsSize:?sint_spec,
       QueryParellelism:?sint_spec,
@@ -28,13 +34,16 @@ read(<<Backups:?sint_spec, RawMode:?sint_spec, RawCopyOnRead:?sbyte_spec, Bin/bi
       RebalanceThrottle:?slong_spec,
       RebalanceTimeout:?slong_spec,
       RawSqlEscapeAll:?sbyte_spec,
-      SqlIndexInlineMaxSize:?sint_spec,
-      ?match_string(SqlSchemaLen, SqlSchema),
-      RawWriteSynchronizationMode:?sint_spec,
-      CacheKeyConfigurationCnt:?sint_spec,
-      Bin2/binary>> = Bin,
+      SqlIndexInlineMaxSize:?sint_spec, 
+      Bin7/binary>> = Bin6,
 
-    {KeyCfgs, Bin3} =
+    {SqlSchema, Bin8} = ignite_decoder:read(Bin7, Option),
+
+    <<RawWriteSynchronizationMode:?sint_spec,
+      CacheKeyConfigurationCnt:?sint_spec,
+      Bin9/binary>> = Bin8,
+
+    {KeyCfgs, BinA} =
     loop:dotimes(fun({KeyCfgAcc, DataAcc}) -> 
                          <<?match_string(TypeNameLen, TypeName),
                            ?match_string(AffinityKeyLen, AffinityKey),
@@ -42,25 +51,27 @@ read(<<Backups:?sint_spec, RawMode:?sint_spec, RawCopyOnRead:?sbyte_spec, Bin/bi
                          {[{TypeName, AffinityKey} | KeyCfgAcc], DataAcc2}
                  end,
                  CacheKeyConfigurationCnt,
-                 {[], Bin2}),
+                 {[], Bin9}),
 
-    <<QueryEntityCnt:?sint_spec, Bin4/binary>> = Bin3,
+    <<QueryEntityCnt:?sint_spec, BinB/binary>> = BinA,
     {Entities ,_} =
     loop:dotimes(fun({EntityAcc, DataAcc}) ->
-                         {Entity, DataAcc2} = query_entity:read(DataAcc),
+                         {Entity, DataAcc2} = query_entity:read(DataAcc, Option),
                          {[Entity | EntityAcc], DataAcc2}
                  end,
                  QueryEntityCnt,
-                 {[], Bin4}),
-    #{backups                          => Backups,
+                 {[], BinB}),
+    #{atomicity_mode                   => from_raw_atomicity_mode(RawAtomicityMode),
+      backups                          => Backups,
       mode                             => from_raw_cache_mode(RawMode),
       copy_on_read                     => utils:from_raw_bool(RawCopyOnRead),
       data_region                      => DataRegionName,
       eager_ttl                        => utils:from_raw_bool(RawEagerTTL),
       statistics_enabled               => utils:from_raw_bool(RawStatisticsEnabled),
       group                            => GroupName,
-      invalidate                       => utils:from_raw_bool(RawInvalidate),
+      %      invalidate                       => utils:from_raw_bool(RawInvalidate),
       default_lock_timeout             => DefaultLockTimeout,
+      max_concurrent_async_operations  => MaxConcurrentAsyncOperations,
       max_query_iterators              => MaxQueryIterators,
       name                             => Name,
       is_onheap_cache_enabled          => utils:from_raw_bool(RawIsOnheapCacheEnabled),
@@ -83,7 +94,7 @@ read(<<Backups:?sint_spec, RawMode:?sint_spec, RawCopyOnRead:?sbyte_spec, Bin/bi
       query_entities                   => Entities
      }.
 
-write(Config) ->
+write(Config, _) ->
     lists:foldl(fun({Key, Value}, Acc) ->
                         write(Key, Value, Acc)
                 end,
@@ -192,6 +203,9 @@ write(query_entities, Value, Bin) ->
 
 to_raw_atomicity_mode(transactional) -> 0;
 to_raw_atomicity_mode(atomic) -> 1.
+
+from_raw_atomicity_mode(0) -> transactional;
+from_raw_atomicity_mode(1) -> atomic.
 
 from_raw_cache_mode(0) -> local;
 from_raw_cache_mode(1) -> replicated;

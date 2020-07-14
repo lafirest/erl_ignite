@@ -21,12 +21,25 @@
          remove_if_equals/2,
          remove_keys/2,
          remove_all/2,
-         on_response/3]).
+         query/2,
+         query_next_page/2,
+         query_fields/3,
+         query_fields_next_page/3,
+         get_name/2,
+         register_name/2,
+         get_type/2,
+         put_type/2,
+         create_cache/2,
+         get_or_create_cache/2,
+         get_cache_names/2,
+         get_configuration/2,
+         create_with_configuration/2,
+         get_or_create_with_configuration/2,
+         destroy_cache/2]).
 
 -include("operation.hrl").
+-include("type_spec.hrl").
 -include("type_binary_spec.hrl").
-
--spec on_response(non_neg_integer(), term(), binary()) -> term().
 
 %%----KV Response-------------------------------------------------------------------
 get(Content, Option) -> ignite_decoder:read_value(Content, Option).
@@ -36,9 +49,9 @@ get_all(<<Len:?sint_spec, Body/binary>>, Option) ->
                                        {Key, BinAcc2} = ignite_decoder:read(BinAcc, Option),
                                        {Value, BinAcc3} = ignite_decoder:read(BinAcc2, Option),
                                        {[{Key, Value} | PairAcc], BinAcc3}
-                                end,
-                                Len,
-                                {[], Body}),
+                               end,
+                               Len,
+                               {[], Body}),
     lists:reverse(ValueR).
 
 put(_, _) -> ok.
@@ -75,95 +88,97 @@ remove_keys(_, _) -> ok.
 remove_all(_, _) -> ok.
 
 %%----SQL Response-------------------------------------------------------------------
-on_response(?OP_QUERY_SQL, _, <<CursorId:?slong_spec, Row:?sint_spec, Bin/binary>>) ->  
-    handle_sql_query_response(CursorId, Row, Bin);
+query(<<CursorId:?slong_spec, Row:?sint_spec, Bin/binary>>, ReadOption) ->  
+    handle_sql_query_response(CursorId, Row, Bin, ReadOption).
 
-on_response(?OP_QUERY_SQL_CURSOR_GET_PAGE, CursorId, <<Row:?sint_spec, Bin/binary>>) ->  
-    handle_sql_query_response(CursorId, Row, Bin);
+query_next_page(<<Row:?sint_spec, Bin/binary>>, ReadOption) ->  
+    handle_sql_query_response(0, Row, Bin, ReadOption).
 
-on_response(?OP_QUERY_SQL_FIELDS, HasNames, <<CursorId:?slong_spec, Column:?sint_spec, Bin/binary>>) ->  
+query_fields(HasNames, <<CursorId:?slong_spec, Column:?sint_spec, Bin/binary>>, ReadOption) ->  
     if HasNames ->
            {NameR, Bin2} = loop:dotimes(fun({NameAcc, DataAcc}) ->
-                                                  {Name, DataAcc2} = ignite_decoder:read(DataAcc),
-                                                  {[Name | NameAcc], DataAcc2}
-                                          end,
-                                          Column,
-                                          {[], Bin}),
+                                                {Name, DataAcc2} = ignite_decoder:read(DataAcc, ReadOption),
+                                                {[Name | NameAcc], DataAcc2}
+                                        end,
+                                        Column,
+                                        {[], Bin}),
            Names = lists:reverse(NameR);
        true ->
-            Names = [],
-            Bin2 = Bin
+           Names = [],
+           Bin2 = Bin
     end,
 
     <<RowNum:?sint_spec, Bin3/binary>> = Bin2,
-    {Rows, <<RawHasMore:?sbyte_spec, _/binary>>} = read_field_grid(RowNum, Column, Bin3),
+    {Rows, <<RawHasMore:?sbyte_spec, _/binary>>} = read_field_grid(RowNum, Column, Bin3, ReadOption),
 
-    {sql_query_fields_result,
-     CursorId,
-     Names,
-     Rows,
-     utils:from_raw_bool(RawHasMore)};
+    #sql_query_fields_result
+    {cursor_id = CursorId,
+     column = Column,
+     names = Names,
+     rows = Rows,
+     has_more = utils:from_raw_bool(RawHasMore)}.
 
-on_response(?OP_QUERY_SQL_FIELDS_CURSOR_GET_PAGE, {CursorId, Names, Column}, <<RowNum:?sint_spec, Bin/binary>>) ->  
-    {Rows, <<RawHasMore:?sbyte_spec, _/binary>>} = read_field_grid(RowNum, Column, Bin),
-    {sql_query_fields_result,
-     CursorId,
-     Names,
-     Rows,
-     utils:from_raw_bool(RawHasMore)};
+query_fields_next_page(Column, <<RowNum:?sint_spec, Bin/binary>>, ReadOption) ->  
+    {Rows, <<RawHasMore:?sbyte_spec, _/binary>>} = read_field_grid(RowNum, Column, Bin, ReadOption),
+    #sql_query_fields_result
+    {rows = Rows,
+     has_more = utils:from_raw_bool(RawHasMore)}.
 
-on_response(?OP_GET_BINARY_TYPE_NAME, _, Bin) ->
-    ignite_decoder:read_value(Bin);
+get_name(Bin, ReadOption) -> ignite_decoder:read_value(Bin, ReadOption).
 
-on_response(?OP_REGISTER_BINARY_TYPE_NAME, _, _) -> ok;
+register_name(_, _) -> ok.
 
-on_response(?OP_GET_BINARY_TYPE, _, Content) -> schema:read(Content);
-on_response(?OP_PUT_BINARY_TYPE, _, _) -> ok;
-on_response(?OP_CACHE_CREATE_WITH_NAME, _, _) -> ok;
-on_response(?OP_CACHE_GET_OR_CREATE_WITH_NAME, _, _) -> ok;
-on_response(?OP_CACHE_GET_NAMES, _, <<Len:?sint_spec, Content/binary>>) -> 
-    loop:dotimes(fun({NameAcc, DataAcc}) -> 
-                        {Name, DataAcc2} = ignite_decoder:read(DataAcc),
-                        {[Name | NameAcc], DataAcc2}
-                 end,
-                 Len,
-                 {[], Content});
+get_type(Content, ReadOption) -> schema:read(Content, ReadOption).
 
-on_response(?OP_CACHE_GET_CONFIGURATION, _, <<_:?sint_spec, Bin/binary>>) -> 
-    configuration:read(Bin);
+put_type(_, _) -> ok.
 
-on_response(?OP_CACHE_CREATE_WITH_CONFIGURATION, _, _) -> ok;
-on_response(?OP_CACHE_GET_OR_CREATE_WITH_CONFIGURATION, _, _) -> ok;
-on_response(?OP_CACHE_DESTROY, _, _) -> ok;
+create_cache(_, _) -> ok.
 
-on_response(_, _, _) -> ok.
+get_or_create_cache(_, _) -> ok.
 
-handle_sql_query_response(CursorId, Row, Bin) ->
+get_cache_names(<<Len:?sint_spec, Content/binary>>, Option) -> 
+    erlang:element(1, 
+                   loop:dotimes(fun({NameAcc, DataAcc}) -> 
+                                        {Name, DataAcc2} = ignite_decoder:read(DataAcc, Option),
+                                        {[Name | NameAcc], DataAcc2}
+                                end,
+                                Len,
+                                {[], Content})).
+
+get_configuration(<<_:?sint_spec, Bin/binary>> = C, Option) -> 
+    configuration:read(Bin, Option).
+
+create_with_configuration(_, _) -> ok.
+get_or_create_with_configuration(_, _) -> ok.
+destroy_cache(_, _) -> ok.
+
+handle_sql_query_response(CursorId, Row, Bin, ReadOption) ->
     {Pairs, <<HasMore:?sbyte_spec, _/binary>>} = 
     loop:dotimes(fun({PairAcc, BinAcc}) -> 
-                         {K, BinAcc2} = ignite_decoder:read(BinAcc),
-                         {V, BinAcc3} = ignite_decoder:read(BinAcc2),
+                         {K, BinAcc2} = ignite_decoder:read(BinAcc, ReadOption),
+                         {V, BinAcc3} = ignite_decoder:read(BinAcc2, ReadOption),
                          Pair = {K, V},
                          {[Pair | PairAcc], BinAcc3}
                  end,
                  Row,
                  {[], Bin}),
-    {sql_query_result, 
-     CursorId, 
-     Pairs,
-     utils:from_raw_bool(HasMore)
-    }.
+    #sql_query_result{cursor_id = CursorId, 
+                      pairs = lists:reverse(Pairs),
+                      has_more = utils:from_raw_bool(HasMore)}.
 
-read_field_grid(Row, Column, Bin) ->
+read_field_grid(Row, Column, Bin, ReadOption) ->
+    {RowR, Bin2} = 
     loop:dotimes(fun({RowAcc, DataAcc}) ->
-                         {ColumnR, DataAcc2} = loop:dotimes(fun({ColumnAcc, InDataAcc}) ->
-                                                                    {ColumnValue, InDataAcc2} = ignite_decoder:read(InDataAcc),
-                                                                    {[ColumnValue | ColumnAcc] , InDataAcc2}
-                                                            end,
-                                                            Column,
-                                                            {[], DataAcc}),
+                         {ColumnR, DataAcc2} = 
+                         loop:dotimes(fun({ColumnAcc, InDataAcc}) ->
+                                              {ColumnValue, InDataAcc2} = ignite_decoder:read(InDataAcc, ReadOption),
+                                              {[ColumnValue | ColumnAcc] , InDataAcc2}
+                                      end,
+                                      Column,
+                                      {[], DataAcc}),
                          Columns = lists:reverse(ColumnR),
                          {[Columns | RowAcc], DataAcc2}
                  end,
                  Row,
-                 {[], Bin}).
+                 {[], Bin}),
+    {lists:reverse(RowR), Bin2}.

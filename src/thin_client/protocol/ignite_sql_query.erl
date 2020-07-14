@@ -8,10 +8,10 @@
 -define(DEFAULT_TIMEOUT, 0).
 -define(DEFAULT_MAX_ROWS, -1).
 
--export([query/5,
+-export([query/6,
          query_next_page/1,
-         query_fields/4,
-         query_fields_next_page/3]).
+         query_fields/5,
+         query_fields_next_page/1]).
 
 %% TODO ?? i think i don't need implement OP_QUERY_SCAN and OP_QUERY_SCAN_CURSOR_GET_PAGE
 
@@ -34,7 +34,7 @@
                     | lazy
                     | names.
 
-query(Cache, Table, Sql, Arguments, OptionsArg) -> 
+query(Cache, Table, Sql, Arguments, OptionsArg, WriteOption) -> 
     Options = maps:from_list(OptionsArg),
     Join = utils:to_raw_bool(maps:get(join, Options, false)),
     Local = utils:to_raw_bool(maps:get(local, Options, false)),
@@ -44,10 +44,10 @@ query(Cache, Table, Sql, Arguments, OptionsArg) ->
     ArgLen = erlang:length(Arguments),
     Content = 
     [identity ||
-        ignite_encoder:write({string, Table}, <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>),
-        ignite_encoder:write({string, Sql}, _),
+        ignite_encoder:write({string, Table}, <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>, WriteOption),
+        ignite_encoder:write({string, Sql}, _, WriteOption),
         lists:foldl(fun(Argument, DataAcc) ->
-                        ignite_encoder:write(Argument, DataAcc)
+                        ignite_encoder:write(Argument, DataAcc, WriteOption)
                     end,
                     <<_/binary, ArgLen:?sint_spec>>,
                     Arguments)
@@ -58,11 +58,12 @@ query(Cache, Table, Sql, Arguments, OptionsArg) ->
                  Replicated:?sbyte_spec, 
                  PageSize:?sint_spec,
                  Timeout:?slong_spec>>,
-    {?OP_QUERY_SQL, undefined, Content2}.
+    {?OP_QUERY_SQL, Content2}.
 
-query_next_page(CursorId) -> {?OP_QUERY_SQL_CURSOR_GET_PAGE, CursorId, <<CursorId:?slong_spec>>}.
+query_next_page(CursorId) -> 
+    {?OP_QUERY_SQL_CURSOR_GET_PAGE, <<CursorId:?slong_spec>>}.
 
-query_fields(Cache, Sql, Arguments, OptionsArg) -> 
+query_fields(Cache, Sql, Arguments, OptionsArg, WriteOption) -> 
     Options = maps:from_list(OptionsArg),
     Join = utils:to_raw_bool(maps:get(join, Options, false)),
     Local = utils:to_raw_bool(maps:get(local, Options, false)),
@@ -83,10 +84,11 @@ query_fields(Cache, Sql, Arguments, OptionsArg) ->
         ignite_encoder:write(if Schema =:= undefined -> undefined;
                                 true -> {string, Schema}
                              end,
-                             <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>),
-        ignite_encoder:write({string, Sql}, <<_/binary, PageSize:?sint_spec, MaxRows:?sint_spec>>),
+                             <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec>>,
+                            WriteOption),
+        ignite_encoder:write({string, Sql}, <<_/binary, PageSize:?sint_spec, MaxRows:?sint_spec>>, WriteOption),
         lists:foldl(fun(Argument, DataAcc) ->
-                        ignite_encoder:write(Argument, DataAcc)
+                        ignite_encoder:write(Argument, DataAcc, WriteOption)
                     end,
                     <<_/binary, ArgLen:?sint_spec>>,
                     Arguments)],
@@ -100,9 +102,10 @@ query_fields(Cache, Sql, Arguments, OptionsArg) ->
                  Lazy:?sbyte_spec, 
                  Timeout:?slong_spec,
                  RawNames:?sbyte_spec>>,
-    {?OP_QUERY_SQL_FIELDS, Names, Content2}.
+    {Names, {?OP_QUERY_SQL_FIELDS, Content2}}.
 
-query_fields_next_page(CursorId, Names, Column) -> {?OP_QUERY_SQL_FIELDS_CURSOR_GET_PAGE, {CursorId, Names, Column}, <<CursorId:?slong_spec>>}.
+query_fields_next_page(CursorId) -> 
+    {?OP_QUERY_SQL_FIELDS_CURSOR_GET_PAGE, <<CursorId:?slong_spec>>}.
 
 get_raw_statement(any) -> 0;
 get_raw_statement(select) -> 1;

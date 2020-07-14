@@ -4,41 +4,46 @@
 -include("operation.hrl").
 -include("type_binary_spec.hrl").
 
--export([read/1, write/2]).
+-export([read/2, write/2]).
 
-read(<<?match_string(KTNLen, KeyTypeName),
-       ?match_string(VTNLen, ValueTypeName),
-       ?match_string(TNLen, TableName),
-       ?match_string(KFNLen, KeyFieldName),
-       ?match_string(VFNLen, ValueFieldName),
-       QueryFieldCnt:?sint_spec,
-       Bin/binary>>) ->
-    {QueryFieldR, <<AliasCount:?sint_spec, Bin2/binary>>} = 
-    loop:dotimes(fun({QueryFieldAcc, 
-                      <<?match_string(NameLen, QFName),
-                        ?match_string(QFTableNameLen, QFTableName),
-                        IsKey:?sbyte_spec,
-                        IsNotNull:?sbyte_spec,
-                        DataAcc2>>}) ->
+read(Bin, Option) ->
+    {KeyTypeName, Bin2} = ignite_decoder:read(Bin, Option),
+    {ValueTypeName, Bin3} = ignite_decoder:read(Bin2, Option),
+    {TableName, Bin4} = ignite_decoder:read(Bin3, Option),
+    {KeyFieldName, Bin5} = ignite_decoder:read(Bin4, Option),
+    {ValueFieldName, Bin6} = ignite_decoder:read(Bin5, Option),
+    <<QueryFieldCnt:?sint_spec, Bin7/binary>> = Bin6,
+
+    {QueryFieldR, <<AliasCount:?sint_spec, Bin8/binary>>} = 
+    loop:dotimes(fun({QueryFieldAcc, DataAcc}) ->
+                         {QFName, DataAcc2} = ignite_decoder:read(DataAcc, Option),
+                         {QFTableName, DataAcc3} = ignite_decoder:read(DataAcc2, Option),
+                         <<IsKey:?sbyte_spec, IsNotNull:?sbyte_spec, DataAcc4/binary>> = DataAcc3,
+                         {DefaultVal, <<Precision:?sint_spec, Scale:?sint_spec, DataAcc5/binary>>} = ignite_decoder:read(DataAcc4, Option),
                          Field = #{name => QFName,
                                    table => QFTableName,
                                    is_key => utils:from_raw_bool(IsKey),
-                                   is_not_null => utils:from_raw_bool(IsNotNull)},
-                         {[Field | QueryFieldAcc], DataAcc2}
+                                   is_not_null => utils:from_raw_bool(IsNotNull),
+                                   default_val => DefaultVal,
+                                   precision => Precision,
+                                   scale => Scale},
+                         {[Field | QueryFieldAcc], DataAcc5}
                  end,
                  QueryFieldCnt,
-                 {[], Bin}),
+                 {[], Bin7}),
     QueryFields = lists:reverse(QueryFieldR),
 
-    {AliasList, <<QueryIndexCnt:?sint_spec, Bin3/binary>>} =
-    loop:dotimes(fun({AliasAcc, <<?match_string(NameLen, Name), ?match_string(AliasLen, Alias), DataAcc2/binary>>}) -> 
-                         Alias = {Name, Alias},
-                         {[Alias | AliasAcc], DataAcc2}
+    {AliasList, <<QueryIndexCnt:?sint_spec, Bin9/binary>>} =
+    loop:dotimes(fun({AliasAcc, DataAcc}) ->
+                         {FName, DataAcc2} = ignite_decoder:read(DataAcc, Option),
+                         {FAlias, DataAcc3} = ignite_decoder:read(DataAcc2, Option),
+                         Alias = {FName, FAlias},
+                         {[Alias | AliasAcc], DataAcc3}
                  end,
                  AliasCount,
-                 {[], Bin2}),
+                 {[], Bin8}),
 
-    {QueryIndexs, _} =
+    {QueryIndexs, BinA} =
     loop:dotimes(fun({QueryIndexAcc, 
                       <<?match_string(INLen, IndexName),
                         RawIndexType:?sbyte_spec,
@@ -67,15 +72,16 @@ read(<<?match_string(KTNLen, KeyTypeName),
 
                  end,
                  QueryIndexCnt,
-                 {[], Bin3}),
-    #{key_type_name    => KeyTypeName,
-      value_type_name  => ValueTypeName,
-      table_name       => TableName,
-      key_field_name   => KeyFieldName,
-      value_field_name => ValueFieldName,
-      query_fields     => QueryFields,
-      alias            => AliasList,
-      query_indexs     => QueryIndexs}.
+                 {[], Bin9}),
+    {#{key_type_name    => KeyTypeName,
+       value_type_name  => ValueTypeName,
+       table_name       => TableName,
+       key_field_name   => KeyFieldName,
+       value_field_name => ValueFieldName,
+       query_fields     => QueryFields,
+       alias            => AliasList,
+       query_indexs     => QueryIndexs},
+     BinA}.
 
 write(#{key_type_name    := KeyTypeName,
         value_type_name  := ValueTypeName,
@@ -98,10 +104,16 @@ write(#{key_type_name    := KeyTypeName,
      lists:foldl(fun(#{name := QFName,
                        table := QFTableName,
                        is_key := IsKey,
-                       is_not_null := IsNotNull}, DataAcc) -> 
+                       is_not_null := IsNotNull} = FieldMap, DataAcc) -> 
+                        DefulatValue = maps:get(default_val, FieldMap, undefined),
+                        Precision = maps:get(precision, FieldMap, -1),
+                        Scale = maps:get(scale, FieldMap, -1),
                          [m_identity ||
                           ignite_encoder:write({string, QFName}, DataAcc),
                           ignite_encoder:write({string, QFTableName}, _),
+                          ignite_encoder:write(DefulatValue, _),
+                          ignite_encoder:write({int, Precision}, _),
+                          ignite_encoder:write({int, Scale}, _),
                           unit(<<_/binary, (utils:to_raw_bool(IsKey)):?sbyte_spec, (utils:to_raw_bool(IsNotNull)):?sbyte_spec>>)]
                  end,
                  <<_/binary, QueryFieldCnt:?sint_spec>>,

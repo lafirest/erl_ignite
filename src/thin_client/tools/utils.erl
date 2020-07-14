@@ -7,7 +7,8 @@
          from_raw_bool/1,
          parse_read_options/1,
          parse_write_options/1,
-         parse_query_options/1]).
+         parse_query_options/1,
+         parse_sql_options/1]).
 
 -include("type_spec.hrl").
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
@@ -91,3 +92,9 @@ parse_query_options(Options) ->
     AsyncCallback = maps:get(async, Options, undefined),
     {AsyncCallback, parse_write_options(WriteOptions), parse_read_options(ReadOptions)}.
 
+parse_sql_options(Options) ->
+    WriteOptions = maps:get(write, Options, []),
+    ReadOptions = maps:get(read, Options, []),
+    AsyncCallback = maps:get(async, Options, undefined),
+    SqlOptions = maps:get(sql, Options, []),
+    {AsyncCallback, SqlOptions, parse_write_options(WriteOptions), parse_read_options(ReadOptions)}.
