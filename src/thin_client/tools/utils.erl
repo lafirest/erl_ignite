@@ -41,8 +41,7 @@ check_result(Value) ->
     end.
 
 to_lower(Char) ->
-    if Char >= 'A' -> Char bor 16#20;
-       Char =< 'Z' -> Char bor 16#20;
+    if Char >= 'A' andalso Char =< 'Z' -> Char bor 16#20;
        true -> Char
     end.
 
