@@ -12,6 +12,7 @@
 
 -include("type_spec.hrl").
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
+
 -define(FNV1_PRIME, 16#01000193).
 
 hash_name(Bin) when is_binary(Bin) -> hash_code(Bin, fun name_hash/2);
@@ -41,7 +42,7 @@ check_result(Value) ->
     end.
 
 to_lower(Char) ->
-    if Char >= 'A' andalso Char =< 'Z' -> Char bor 16#20;
+    if Char >= $A andalso Char =< $Z -> Char bor 16#20;
        true -> Char
     end.
 
