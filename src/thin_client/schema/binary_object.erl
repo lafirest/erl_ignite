@@ -8,7 +8,7 @@
 read_field(Name, Bin) -> read_field(Name, Bin, []).
 
 read_field(Name, #binary_object{body = Body, schemas = Schemas}, Options) ->
-    NameId = utils:hash_name(Name),
+    NameId = utils:hash_string(Name),
     case maps:get(NameId, Schemas, undefined) of
         undefined -> undefined;
         Offset ->

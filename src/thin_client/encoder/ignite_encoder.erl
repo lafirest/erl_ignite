@@ -124,7 +124,7 @@ inner_write({time_array, TimeArray}, Bin, Option) ->
     write_nullable_object_array(TimeArray, time, <<Bin/binary, ?time_array_code:?sbyte_spec>>, Option);
 
 inner_write({{object_array, TypeName}, Array}, Bin, Option) ->
-    TypeId = utils:hash_name(TypeName),
+    TypeId = utils:hash_string(TypeName),
     write_nullable_object_array(Array, 
                                 {complex_object, TypeName},
                                 <<Bin/binary, ?object_array_code:?sbyte_spec, TypeId:?sint_spec>>,
@@ -233,9 +233,9 @@ inner_write({term, Term}, Bin, Option) ->
     Data = erlang:term_to_binary(Term),
     inner_write({{complex_object, "ErlangTerm"}, {term, Data}}, Bin, Option);
 
-inner_write({wrapped, Binary}, Bin, _) ->
+inner_write({wrapped, Binary, Offset}, Bin, _) ->
     Len = erlang:byte_size(Binary),
-    <<Bin/binary, ?wrapped_data_code:?sbyte_spec, Len:?sint_spec, Binary/binary, 0:?sint_spec>>;
+    <<Bin/binary, ?wrapped_data_code:?sbyte_spec, Len:?sint_spec, Binary/binary, Offset:?sint_spec>>;
 
 inner_write({{binary_enum, TypeName}, Value}, Bin, _) ->
     TypeId = utils:hash(TypeName),

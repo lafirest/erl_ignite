@@ -169,7 +169,7 @@ inner_register_type(#{name := TypeName,
     TypeTag = maps:get(type_tag, Register, undefined),
     Constructor = maps:get(constructor, Register, undefined),
     OnUpgrades = maps:get(on_upgrades, Register, []),
-    TypeId = utils:hash_name(TypeName),
+    TypeId = utils:hash_string(TypeName),
     RegisterMeta = maps:get(register_meta, Register, false),
     AffinityKey = maps:get(affinity_key, Register, undefined),
     SchemaId = utils:calculate_schemaId([Name || #{name := Name} <- FieldDefs]),
@@ -177,7 +177,7 @@ inner_register_type(#{name := TypeName,
         tuple ->
             FieldDataR = lists:foldl(fun(#{name := Name, type := Type}, DataAcc) ->
                                              FieldType = Type,
-                                             FieldId = utils:hash_name(Name),
+                                             FieldId = utils:hash_string(Name),
                                              [{FieldType, FieldId} | DataAcc]
                                      end,
                                      [],
@@ -187,7 +187,7 @@ inner_register_type(#{name := TypeName,
         _ -> 
             FieldDataR = lists:foldl(fun(#{name := Name, type := Type, key := Key}, DataAcc) ->
                                              FieldType = Type,
-                                             FieldId = utils:hash_name(Name),
+                                             FieldId = utils:hash_string(Name),
                                              [{FieldType, FieldId, Key} | DataAcc]
                                      end,
                                      [],
@@ -217,7 +217,7 @@ inner_register_type(#{name := TypeName,
                     fields => lists:foldl(fun(Def, Acc) -> 
                                                   Name = maps:get(name, Def),
                                                   Type = maps:get(type, Def),
-                                                  FieldId = utils:hash_name(Name),
+                                                  FieldId = utils:hash_string(Name),
                                                   TypeCode = type_atom2code(Type),
                                                   [#{name => Name,
                                                      type_id => FieldId,
@@ -230,7 +230,7 @@ inner_register_type(#{name := TypeName,
     end;
 
 inner_register_type(#{name := TypeName, enums := Enums} = Register) ->
-    TypeId = utils:hash_name(TypeName),
+    TypeId = utils:hash_string(TypeName),
     Schema = #enum_schema{type_id = TypeId,
                           type_name = TypeName,
                           values = Enums},
@@ -293,7 +293,7 @@ register_type(Type) ->
     gen_server:cast(?MODULE, {register_type, Type}).
 
 get_type(TypeName) when is_list(TypeName) ->
-    TypeId = utils:hash_name(TypeName),
+    TypeId = utils:hash_string(TypeName),
     get_type(TypeId);
 
 get_type(TypeId) ->

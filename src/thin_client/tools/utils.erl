@@ -1,6 +1,7 @@
 -module(utils).
--export([hash_name/1, 
-         hash_data/1, 
+-export([hash_string/1, 
+         hash_raw_string/1, 
+         hash_data/1,
          calculate_schemaId/1,
          get_cache_id/1,
          register_cache/1,
@@ -16,16 +17,16 @@
 -define(FNV1_PRIME, 16#01000193).
 -define(CACHE_KEY_TAG, ignite_cache).
 
-hash_name(Bin) when is_binary(Bin) -> hash_code(Bin, fun name_hash/2);
-hash_name(Str) -> hash_code(Str, fun name_hash/2).
+hash_string(Bin) -> hash_code(Bin, fun string_hash/2, 0).
 
-hash_data(Bin) when is_binary(Bin) -> hash_code(Bin, fun data_hash/2);
-hash_data(Str) -> hash_code(Str, fun data_hash/2).
+hash_raw_string(Bin) -> hash_code(Bin, fun hash_data/2, 0).
 
-hash_code(Bin, Func) when is_binary(Bin) ->
+hash_data(Bin) -> hash_code(Bin, fun hash_data/2, 1).
+
+hash_code(Bin, Func, Acc) when is_binary(Bin) ->
     Len = erlang:byte_size(Bin),
-    hash_code_bin(Bin, 0, Len, Func, 0);
-hash_code(Str, Func) -> hash_code_str(Str, Func, 0).
+    hash_code_bin(Bin, 0, Len, Func, Acc);
+hash_code(Str, Func, Acc) -> hash_code_str(Str, Func, Acc).
 
 hash_code_bin(_, Len, Len, _, Acc) -> check_result(Acc);
 hash_code_bin(Bin, Pos, Len, Func, Acc) ->
@@ -47,13 +48,13 @@ to_lower(Char) ->
        true -> Char
     end.
 
-name_hash(Char, Acc) -> 31 * Acc + to_lower(Char).
-data_hash(Byte, Acc) -> 31 * Acc + Byte.
+string_hash(Char, Acc) -> 31 * Acc + to_lower(Char).
+hash_data(Byte, Acc) -> 31 * Acc + Byte.
 
 calculate_schemaId([]) -> 0;
 calculate_schemaId(Fields) ->
     Id = lists:foldl(fun(FieldName, Acc) ->
-                             FieldId = utils:hash_name(FieldName),
+                             FieldId = utils:hash_string(FieldName),
                              lists:foldl(fun(Shift, IAcc) ->
                                                  IAcc2 = (IAcc bxor ((FieldId bsr Shift) band 16#FF)) band 16#FFFFFFFF,
                                                  (IAcc2 * ?FNV1_PRIME) band 16#FFFFFFFF
@@ -68,16 +69,16 @@ calculate_schemaId(Fields) ->
 get_cache_id(CacheId) ->
     if is_atom(CacheId) -> persistent_term:get({?CACHE_KEY_TAG, CacheId});
        is_integer(CacheId) -> CacheId;
-       true -> utils:hash_data(CacheId)
+       true -> utils:hash_raw_string(CacheId)
     end.
 
 register_cache({Atom, Name}) ->
-    CacheId = utils:hash_data(Name),
+    CacheId = utils:hash_raw_string(Name),
     persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId);
 
 register_cache(Atom) ->
     Name = erlang:atom_to_list(Atom),
-    CacheId = utils:hash_data(Name),
+    CacheId = utils:hash_raw_string(Name),
     persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId).
 
 to_raw_bool(true) -> 1;

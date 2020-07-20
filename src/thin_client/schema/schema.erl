@@ -81,10 +81,9 @@ write(#enum_schema{type_id = TypeId, type_name = TypeName, values = Values}, Wri
 write(#{type_name := TypeName,
         affinity_key := AffinityKey,
         fields := Fields,
-        schemas := Schemas} = In,
+        schemas := Schemas}, 
       WriteOption) ->
-    io:format("In is :~p~n", [In]),
-    TypeId = utils:hash_name(TypeName),
+    TypeId = utils:hash_string(TypeName),
     FieldCnt = erlang:length(Fields),
     SchemaCnt = erlang:length(Schemas),
     [m_identity ||
