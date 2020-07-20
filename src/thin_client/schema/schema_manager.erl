@@ -66,7 +66,6 @@ init([]) ->
                        ".*.cfg", 
                        true,
                        fun(File, _) -> 
-                               logger:error("find file:~p~n", [File]),
                                {ok, Types} = file:consult(File),
                                lists:foreach(fun(Type) -> inner_register_type(Type) end, Types)
                        end,
