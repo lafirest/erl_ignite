@@ -35,12 +35,6 @@ inner_write({bool, Bool}, Bin, _) ->
 inner_write(undefined, Bin, _) ->
     <<Bin/binary, ?null_code:?sbyte_spec>>;
 
-inner_write({term, Term}, Bin, #write_option{fast_term = FastTerm} = Option) ->
-    Data = erlang:term_to_binary(Term),
-    if FastTerm -> inner_write({byte_array, Data}, Bin, Option);
-       true -> inner_write({{complex_object, "ErlangTerm"}, {term, Data}}, Bin, Option)
-    end;
-
 inner_write({bin_string, String}, Bin, Option) ->
     case String of
         undefined -> inner_write(undefined, Bin, Option);
@@ -74,7 +68,7 @@ inner_write({time, Time}, Bin, _) ->
     Value = calendar:time_to_seconds(Time) * 1000,
     <<Bin/binary, ?time_code:?sbyte_spec, Value:?slong_spec>>;
 
-inner_write({enum, TypeName, Value}, Bin, _) ->
+inner_write({{enum, TypeName}, Value}, Bin, _) ->
     TypeId = utils:hash(TypeName),
     RawValue = 
     case schema_manager:get_type(TypeId) of
@@ -231,11 +225,19 @@ inner_write({{complex_object, TypeName}, Value}, Bin, Option) ->
       SchemaOffsetT:?sint_spec,
       BodyT/binary>>;
 
+inner_write({fast_term, Term}, Bin, Option) ->
+    Data = erlang:term_to_binary(Term),
+    inner_write({byte_array, Data}, Bin, Option);
+
+inner_write({term, Term}, Bin, Option) ->
+    Data = erlang:term_to_binary(Term),
+    inner_write({{complex_object, "ErlangTerm"}, {term, Data}}, Bin, Option);
+
 inner_write({wrapped, Binary}, Bin, _) ->
     Len = erlang:byte_size(Binary),
     <<Bin/binary, ?wrapped_data_code:?sbyte_spec, Len:?sint_spec, Binary/binary, 0:?sint_spec>>;
 
-inner_write({binary_enum, TypeName, Value}, Bin, _) ->
+inner_write({{binary_enum, TypeName}, Value}, Bin, _) ->
     TypeId = utils:hash(TypeName),
     <<Bin/binary, ?binary_enum_code:?sbyte_spec, TypeId:?sint_spec, Value:?sint_spec>>.
 

@@ -23,6 +23,5 @@ on_response(<<_:?sint_spec,
               Major:?sshort_spec,
               Minor:?sshort_spec,
               Patch:?sshort_spec,
-              Bin/binary>>) ->
-    {ErrMsg, _} = ignite_decoder:read(Bin),
+              ErrMsg/binary>>) ->
     {false, Status, Major, Minor, Patch, ErrMsg}.

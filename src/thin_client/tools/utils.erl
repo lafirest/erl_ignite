@@ -3,6 +3,7 @@
          hash_data/1, 
          calculate_schemaId/1,
          get_cache_id/1,
+         register_cache/1,
          to_raw_bool/1,
          from_raw_bool/1,
          parse_read_options/1,
@@ -12,8 +13,8 @@
 
 -include("type_spec.hrl").
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
-
 -define(FNV1_PRIME, 16#01000193).
+-define(CACHE_KEY_TAG, ignite_cache).
 
 hash_name(Bin) when is_binary(Bin) -> hash_code(Bin, fun name_hash/2);
 hash_name(Str) -> hash_code(Str, fun name_hash/2).
@@ -64,8 +65,20 @@ calculate_schemaId(Fields) ->
        true -> Id - 16#100000000
     end.
 
-get_cache_id(CacheId) when is_integer(CacheId) -> CacheId;
-get_cache_id(CacheName) -> utils:hash_data(CacheName).
+get_cache_id(CacheId) ->
+    if is_atom(CacheId) -> persistent_term:get({?CACHE_KEY_TAG, CacheId});
+       is_integer(CacheId) -> CacheId;
+       true -> utils:hash_data(CacheId)
+    end.
+
+register_cache({Atom, Name}) ->
+    CacheId = utils:hash_data(Name),
+    persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId);
+
+register_cache(Atom) ->
+    Name = erlang:atom_to_list(Atom),
+    CacheId = utils:hash_data(Name),
+    persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId).
 
 to_raw_bool(true) -> 1;
 to_raw_bool(false) -> 0.

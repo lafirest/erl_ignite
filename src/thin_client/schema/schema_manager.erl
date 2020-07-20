@@ -11,6 +11,7 @@
 -behaviour(gen_server).
 
 -include("schema.hrl").
+-include("type_binary_spec.hrl").
 -define(SERVER, ?MODULE).
 
 %% API
@@ -170,6 +171,8 @@ inner_register_type(#{name := TypeName,
     Constructor = maps:get(constructor, Register, undefined),
     OnUpgrades = maps:get(on_upgrades, Register, []),
     TypeId = utils:hash_name(TypeName),
+    RegisterMeta = maps:get(register_meta, Register, false),
+    AffinityKey = maps:get(affinity_key, Register, undefined),
     SchemaId = utils:calculate_schemaId([Name || #{name := Name} <- FieldDefs]),
     case TypeType of
         tuple ->
@@ -205,14 +208,84 @@ inner_register_type(#{name := TypeName,
                           schema_format = SchemaFormat,
                           constructor = Constructor,
                           on_upgrades = OnUpgrades},
-    ets:insert(?MODULE, Schema);
+    ets:insert(?MODULE, Schema),
 
-inner_register_type(#{name := TypeName, enums := Enums}) ->
+    if RegisterMeta ->
+           Meta = #{affinity_key => AffinityKey,
+                    type_name => TypeName,
+                    type_id => TypeId,
+                    schemas => [#{schema_id => SchemaId, fields => FieldIdOrder}],
+                    fields => lists:foldl(fun(Def, Acc) -> 
+                                                  Name = maps:get(name, Def),
+                                                  Type = maps:get(type, Def),
+                                                  FieldId = utils:hash_name(Name),
+                                                  TypeCode = type_atom2code(Type),
+                                                  [#{name => Name,
+                                                     type_id => FieldId,
+                                                     type_code => TypeCode} | Acc]
+                                          end,
+                                          [],
+                                          FieldDefs)},
+           ignite:put_type(Meta);
+       true -> ok
+    end;
+
+inner_register_type(#{name := TypeName, enums := Enums} = Register) ->
     TypeId = utils:hash_name(TypeName),
     Schema = #enum_schema{type_id = TypeId,
                           type_name = TypeName,
                           values = Enums},
-    ets:insert(?MODULE, Schema).
+    RegisterMeta = maps:get(register_meta, Register, false),
+    ets:insert(?MODULE, Schema),
+    if RegisterMeta -> ignite:put_type(Schema);
+       true -> ok
+    end;
+
+inner_register_type(#{caches := Caches}) ->
+    lists:foreach(fun(Cache) -> utils:register_cache(Cache) end, Caches).
+
+%% type atom to type code
+type_atom2code(byte) -> ?byte_code;
+type_atom2code(short) -> ?short_code;
+type_atom2code(int) -> ?int_code;
+type_atom2code(long) -> ?long_code;
+type_atom2code(float) -> ?float_code;
+type_atom2code(double) -> ?double_code;
+type_atom2code(char) -> ?char_code;
+type_atom2code(bool) -> ?bool_code;
+type_atom2code(undefined) -> ?null_code;
+type_atom2code(bin_string) -> ?string_code;
+type_atom2code(string) -> ?string_code;
+type_atom2code(uuid) -> ?uuid_code;
+type_atom2code(timestamp) -> ?timestamp_code;
+type_atom2code(data) -> ?date_code;
+type_atom2code(time) -> ?time_code;
+type_atom2code({enum, _}) -> ?enum_code;
+type_atom2code(byte_array) -> ?byte_array_code;
+type_atom2code(short_array) -> ?short_array_code;
+type_atom2code(int_array) -> ?int_array_code;
+type_atom2code(long_array) -> ?long_array_code;
+type_atom2code(float_array) -> ?float_array_code;
+type_atom2code(double_array) -> ?double_array_code;
+type_atom2code(char_array) -> ?char_array_code;
+type_atom2code(bool_array) -> ?bool_array_code;
+type_atom2code(bin_string_array) -> ?string_array_code;
+type_atom2code(string_array) -> ?string_array_code;
+type_atom2code(uuid_array) -> ?uuid_array_code;
+type_atom2code(timestamp_array) -> ?timestamp_array_code;
+type_atom2code(date_array) -> ?date_array_code;
+type_atom2code(time_array) -> ?time_array_code;
+type_atom2code({object_array, _}) -> ?complex_object_code;
+type_atom2code({collection, _, _}) -> ?collection_code;
+type_atom2code({map, _, _}) -> ?map_code;
+type_atom2code({orddict, _, _}) -> ?map_code;
+type_atom2code({enum_array, _}) -> ?enum_array_code;
+type_atom2code({complex_object, _}) -> ?complex_object_code;
+type_atom2code({wrapped, _}) -> ?wrapped_data_code;
+type_atom2code({binary_enum, _}) -> ?binary_enum_code;
+type_atom2code(fast_term) -> ?byte_array_code;
+type_atom2code(term) -> ?complex_object_code.
+
 
 %%%===================================================================
 %%% API functions

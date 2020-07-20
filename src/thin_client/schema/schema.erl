@@ -22,7 +22,7 @@ read(<<Exists:?sbyte_spec, Bin/binary>>, ReadOption) ->
                                           DataAcc3/binary>>} = ignite_decoder:read(DataAcc, ReadOption),
                                  Field = #{name => Name,
                                            type_code => FieldTypeCode,
-                                           name_hash => FieldNameHash},
+                                           type_id => FieldNameHash},
                                  {[Field | FieldAcc], DataAcc3}
                          end,
                          FieldCount,
@@ -81,29 +81,28 @@ write(#enum_schema{type_id = TypeId, type_name = TypeName, values = Values}, Wri
 write(#{type_name := TypeName,
         affinity_key := AffinityKey,
         fields := Fields,
-        schemas := Schemas},
+        schemas := Schemas} = In,
       WriteOption) ->
+    io:format("In is :~p~n", [In]),
     TypeId = utils:hash_name(TypeName),
     FieldCnt = erlang:length(Fields),
     SchemaCnt = erlang:length(Schemas),
     [m_identity ||
      ignite_encoder:write({string, TypeName}, <<TypeId:?sint_spec>>, WriteOption),
      ignite_encoder:write({string, AffinityKey}, _, WriteOption),
-     lists:foldl(fun(#{name := Name, type_code := TypeCode, name_hash := NameHash}, DataAcc) ->
+     lists:foldl(fun(#{name := Name, type_code := TypeCode, type_id := NameHash}, DataAcc) ->
                          DataAcc2 = ignite_encoder:write({string, Name}, DataAcc, WriteOption),
                          <<DataAcc2/binary, TypeCode:?sint_spec, NameHash:?sint_spec>>
                  end,
                  <<_/binary, FieldCnt:?sint_spec>>,
                  Fields),
-     lists:foldl(fun(FieldNames, DataAcc) -> 
-                         SchemaId = utils:calculate_schemaId(FieldNames),
-                         FieldIdLen = erlang:length(FieldNames),
-                         lists:foldl(fun(FieldName, IDataAcc) -> 
-                                             FieldId = utils:hash_name(FieldName),
+     lists:foldl(fun(#{schema_id := SchemaId, fields := FieldIds}, DataAcc) -> 
+                         FieldIdLen = erlang:length(FieldIds),
+                         lists:foldl(fun(FieldId, IDataAcc) -> 
                                              <<IDataAcc/binary, FieldId:?sint_spec>>
                                      end,
                                      <<DataAcc/binary, SchemaId:?sint_spec, FieldIdLen:?sint_spec>>,
-                                     FieldNames)
+                                     FieldIds)
                  end,
                  <<_/binary, 0:?sbyte_spec, SchemaCnt:?sint_spec>>,
                  Schemas)

@@ -20,7 +20,7 @@ get_type(HashCode) ->
     {?OP_GET_BINARY_TYPE, <<HashCode:?sint_spec>>}.
 
 put_type(Type, Option) ->
-    {?OP_GET_BINARY_TYPE, schema:write(Type, Option)}.
+    {?OP_PUT_BINARY_TYPE, schema:write(Type, Option)}.
 
 get_raw_platfomr(java) -> 0;
 get_raw_platfomr(dotnet) -> 1.
