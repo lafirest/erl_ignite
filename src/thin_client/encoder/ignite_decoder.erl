@@ -259,12 +259,15 @@ get_offset_type(Flag) ->
 
 is_compact_footer(Flag) -> Flag band ?COMPACT_FOOTER =/= 0.
 
-make_object(undefined, tuple, Tag, _, Values) ->
-    erlang:list_to_tuple([Tag | Values]);
-
 make_object(undefined, map, _, Keys, Values) ->
     Pairs = lists:zip(Keys, Values),
     maps:from_list(Pairs);
+
+make_object(undefined, tuple, _, _, Values) ->
+    erlang:list_to_tuple(Values);
+
+make_object(undefined, record, Tag, _, Values) ->
+    erlang:list_to_tuple([Tag | Values]);
 
 make_object(Constructor, _, _, _, Values) ->
     Constructor(Values).

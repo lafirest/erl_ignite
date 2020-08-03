@@ -290,12 +290,16 @@ get_offset_type(MaxOffset) ->
 
 get_field_pairs([], _, _, _) -> [];
 
-get_field_pairs(Types, tuple, _, Value) ->
-    [_ | Values] = erlang:tuple_to_list(Value),
-    lists:zip(Types, Values);
-
 get_field_pairs(Types, map, FieldKeys, Map) ->
     Values = [maps:get(OrderKey, Map) || OrderKey <- FieldKeys],
+    lists:zip(Types, Values);
+
+get_field_pairs(Types, tuple, _, Value) ->
+    Values = erlang:tuple_to_list(Value),
+    lists:zip(Types, Values);
+
+get_field_pairs(Types, record, _, Value) ->
+    [_ | Values] = erlang:tuple_to_list(Value),
     lists:zip(Types, Values).
 
 %%---- API functions-------------------------------------------------------------------
