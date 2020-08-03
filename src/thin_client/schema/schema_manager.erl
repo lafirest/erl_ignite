@@ -61,15 +61,18 @@ start_link() ->
 init([]) ->
     ets:new(?MODULE, [set, protected, named_table, {keypos, #type_schema.type_id}, {read_concurrency, true}]),
     lists:foreach(fun(Type) -> inner_register_type(Type) end, default_types()),
-    {ok, SchemaDir} = application:get_env(erl_ignite, schema),
-    filelib:fold_files(SchemaDir,
-                       ".*.cfg", 
-                       true,
-                       fun(File, _) -> 
-                               {ok, Types} = file:consult(File),
-                               lists:foreach(fun(Type) -> inner_register_type(Type) end, Types)
-                       end,
-                       undefined),
+    case application:get_env(erl_ignite, schema, undefined) of
+        undefined -> ok;
+        SchemaDir ->
+            filelib:fold_files(SchemaDir,
+                               ".*.cfg", 
+                               true,
+                               fun(File, _) -> 
+                                       {ok, Types} = file:consult(File),
+                                       lists:foreach(fun(Type) -> inner_register_type(Type) end, Types)
+                               end,
+                               undefined)
+    end,
     {ok, #state{}}.
 
 %%--------------------------------------------------------------------
