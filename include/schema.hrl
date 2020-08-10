@@ -3,7 +3,7 @@
 -type value()         :: term().
 -type values()        :: list(value()).
 -type field_id()      :: integer().
--type type_type()     :: tuple | map.
+-type type_type()     :: record | tuple | map.
 
 -type collection_type() :: array
                     | sets
@@ -19,6 +19,7 @@
                     | bool
                     | undefined
                     | term               
+                    | fast_term               
                     | bin_string
                     | string
                     | uuid
@@ -65,7 +66,7 @@
         {type_id        :: integer(),
          type_name      :: string(),
          type_type      :: type_type(),
-         type_tag       :: undefined | atom(), %% default(undefined) for map, atom() for tuple
+         type_tag       :: undefined | atom(), %% default(undefined) for map, atom() for record, undefined for tuple
          schema_id      :: integer(),
          version        :: integer(),
          %% field type list, using when encoder

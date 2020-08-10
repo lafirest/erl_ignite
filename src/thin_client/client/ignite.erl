@@ -23,8 +23,12 @@
          remove_all/1, remove_all/2,
          query/3, query/4, query/5,
          query_fields/2, query_fields/3, query_fields/4,
+         execute/2, execute/3, execute/4,
+         query_row/2, query_row/3, query_row/4,
+         query_one/2, query_one/4, query_one/5,
          batch_query/6,
          batch_query_fields/5,
+         upsert/5, upsert/6,
          get_name/2, get_name/3,
          register_name/3, register_name/4,
          get_type/1, get_type/2,
@@ -198,6 +202,33 @@ query_fields(Cache, Sql, Arguments, Option) ->
                          end)
     end.
 
+query_row(Cache, Sql) -> erlang:hd(query_fields(Cache, Sql)).
+query_row(Cache, Sql, Arguments) -> erlang:hd(query_fields(Cache, Sql, Arguments)).
+query_row(Cache, Sql, Arguments, Option) -> erlang:hd(query_fields(Cache, Sql, Arguments, Option)).
+
+query_one(Cache, Sql) -> safe_hd(query_row(Cache, Sql), undefined).
+query_one(Cache, Sql, Arguments, Default) -> safe_hd(query_row(Cache, Sql, Arguments), Default).
+query_one(Cache, Sql, Arguments, Default, Option) -> safe_hd(query_row(Cache, Sql, Arguments, Option), Default).
+
+execute(Cache, Sql) -> query_one(Cache, Sql, [], 0).
+execute(Cache, Sql, Arguments) -> query_one(Cache, Sql, Arguments, 0).
+execute(Cache, Sql, Arguments, Option) -> query_one(Cache, Sql, Arguments, 0, Option).
+
+safe_hd([], Default) -> Default;
+safe_hd([H|_], _) -> H.
+
+%%----UPSERT API ----------------------------------------------------------
+upsert(Cache, Sql, Arguments, Key, Value) -> upsert(Cache, Sql, Arguments, Key, Value, #{}).
+upsert(Cache, Sql, Arguments, Key, Value, Option) ->
+    case execute(Cache, Sql, Arguments, Option) of
+        0 -> 
+            case put_if_absent(Cache, Key, Value) of
+                false -> execute(Cache, Sql, Arguments, Option);
+                _ -> 1
+            end;
+        _ -> 1
+    end.
+
 %%----Batch SQL API ----------------------------------------------------------
 batch_query(Cache, Table, Sql, BatchCall, Arguments, Option) ->
     {Async, SqlOptions, WO, RO} = utils:parse_sql_options(Option),
@@ -310,8 +341,8 @@ sync_query(Query, Handler, #read_option{timeout = Timeout} = Option) ->
               {on_query_failed, Query, timeout}
     end.
 
-do_async_callback({function, Func}, Value) ->
-    Func(Value);
+do_async_callback(Fun, Value) when is_function(Fun) ->
+    Fun(Value);
 
 do_async_callback({message, Pid, Tag}, Value) ->
     erlang:send(Pid, {Tag, Value});
