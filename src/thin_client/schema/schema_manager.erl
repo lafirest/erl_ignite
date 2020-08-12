@@ -176,8 +176,7 @@ inner_register_type(#{name := TypeName,
     RegisterMeta = maps:get(register_meta, Register, false),
     AffinityKey = maps:get(affinity_key, Register, undefined),
     SchemaId = utils:calculate_schemaId([Name || #{name := Name} <- FieldDefs]),
-    case TypeType of
-        tuple ->
+    if TypeType =:= tuple orelse TypeType =:= record ->
             FieldDataR = lists:foldl(fun(#{name := Name, type := Type}, DataAcc) ->
                                              FieldType = Type,
                                              FieldId = utils:hash_string(Name),
@@ -187,7 +186,7 @@ inner_register_type(#{name := TypeName,
                                      FieldDefs),
             {FieldTypes, FieldIdOrder} = lists:unzip(lists:reverse(FieldDataR)),
             FieldKeys = undefined;
-        _ -> 
+        true -> 
             FieldDataR = lists:foldl(fun(#{name := Name, type := Type, key := Key}, DataAcc) ->
                                              FieldType = Type,
                                              FieldId = utils:hash_string(Name),
