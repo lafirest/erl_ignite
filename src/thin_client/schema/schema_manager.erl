@@ -60,7 +60,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 init([]) ->
     ets:new(?MODULE, [set, protected, named_table, {keypos, #type_schema.type_id}, {read_concurrency, true}]),
-    lists:foreach(fun(Type) -> inner_register_type(Type) end, default_types()),
+    lists:foreach(fun(Type) -> try_register_type(Type) end, default_types()),
     case application:get_env(erl_ignite, schema, undefined) of
         undefined -> ok;
         SchemaDir ->
@@ -69,7 +69,7 @@ init([]) ->
                                true,
                                fun(File, _) -> 
                                        {ok, Types} = file:consult(File),
-                                       lists:foreach(fun(Type) -> inner_register_type(Type) end, Types)
+                                       lists:foreach(fun(Type) -> try_register_type(Type) end, Types)
                                end,
                                undefined)
     end,
@@ -163,6 +163,13 @@ default_types() ->
                                   ],
              constructor       => fun([Bin]) -> erlang:binary_to_term(Bin) end},
     [Term].
+
+try_register_type(Register) ->
+    try
+        inner_register_type(Register)
+    catch _:Reason:Trace ->
+        logger:error("register failed, data :~p~nReason:~p~nTrace:~p~n", [Register, Reason, Trace])
+    end.
 
 inner_register_type(#{name := TypeName,
                       type := TypeType,
