@@ -119,25 +119,13 @@ handle_info(Msg, State) ->
     end.
 
 do_handle_info(recv, #recver{parent = Parent, socket = Socket, buffer = Buffer} = State) ->
-    case gen_tcp:recv(Socket, 0) of
+    case socket:recv(Socket) of
         {error, _} = Error ->
             {stop, Error, State};
         {ok, Packet} ->
             tick_recv(),
             Buffer2 = <<Buffer/binary, Packet/binary>>,
-            Len = erlang:byte_size(Buffer2),
-            if Len < ?DATALENSIZE ->
-                   {noreply, State#recver{buffer = Buffer2}};
-               true ->
-                   <<MsgLen:?sint_spec, Body/binary>> = Buffer2,
-                   if MsgLen > Len - ?DATALENSIZE ->
-                        {noreply, State#recver{buffer = Buffer2}};
-                      true ->
-                          <<Msg:MsgLen/binary, BufferRest/binary>> = Body,
-                          erlang:send(Parent, {tcp, Msg}),
-                          {noreply, State#recver{buffer = BufferRest}}
-                   end
-            end
+            {noreply, State#recver{buffer = dispatch_packate(Parent, Buffer2)}}
     end;
 
 do_handle_info(Info, State) ->
@@ -174,6 +162,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 tick_recv() -> 
     erlang:send(self(), recv).
+
+dispatch_packate(Parent, Bin) ->
+    BufferSize = erlang:byte_size(Bin),
+    if BufferSize < ?DATALENSIZE -> Bin;
+       true ->
+           <<MsgLen:?sint_spec, Body/binary>> = Bin,
+           if MsgLen =< BufferSize - ?DATALENSIZE ->
+                  <<Msg:MsgLen/binary, BufferRest/binary>> = Body,
+                  erlang:send(Parent, {tcp, Msg}),
+                  dispatch_packate(Parent, BufferRest);
+              true -> Bin
+           end
+    end.
 
 %%%===================================================================
 %%% API functions

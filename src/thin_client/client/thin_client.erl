@@ -37,7 +37,7 @@
 -record(client, 
         {alloc_id :: request_id(),
          requests :: requests(),
-         socket :: gen_tcp:socket()
+         socket :: socket:socket()
         }).
 
 %%%===================================================================
@@ -73,17 +73,21 @@ start_link(Args) ->
 %%--------------------------------------------------------------------
 init({Host, Port, {Major, Minor, Patch}, Username, Password}) ->
     erlang:process_flag(trap_exit, true),
-    case gen_tcp:connect(Host, Port, [inet, {active, false}, binary, {nodelay, true}, {keepalive, true}]) of
+    case socket:open(inet, stream, tcp, #{}) of
         {ok, Socket} ->
+            socket:setopt(Socket, socket, reuseaddr, true),
+            socket:setopt(Socket, socket, reuseport, true),
+            socket:setopt(Socket, socket, keepalive, true),
+            socket:setopt(Socket, tcp, nodelay, true),
             HandShake = ignite_connection:hand_shake(Major, Minor, Patch, Username, Password),
-            ok = gen_tcp:send(Socket, HandShake),
-            case gen_tcp:recv(Socket, 0) of
+            ok = socket:connect(Socket, #{family => inet, port => Port, addr => Host}),
+            ok = socket:send(Socket, HandShake),
+            case socket:recv(Socket) of
                 {ok, Packet} ->
                     case ignite_connection:on_response(Packet) of
                         ok ->
                             {ok, Recver} = thin_client_recver:start_link(self(), Socket),
                             erlang:monitor(process, Recver),
-                            gen_tcp:controlling_process(Socket, Recver),
                             erlang:send(Recver, recv),
                             {ok, #client{alloc_id = 1,
                                          requests = #{},
@@ -140,7 +144,7 @@ do_handle_cast({query, From, Ref, {Op, Content}},
                     socket = Socket} = Client) ->
     ReqData = ignite_query:make_request(AllocId, Op, Content),
     Request = #request{from = From, ref = Ref},
-    ok = gen_tcp:send(Socket, ReqData),
+    ok = socket:send(Socket, ReqData),
     {noreply, Client#client{alloc_id = AllocId + 1,
                             requests = Requests#{AllocId => Request}}};
 
@@ -195,7 +199,8 @@ do_handle_info(Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, #client{socket = Socket}) ->
+    socket:shutdown(Socket, read_write),
     ok.
 
 %%--------------------------------------------------------------------

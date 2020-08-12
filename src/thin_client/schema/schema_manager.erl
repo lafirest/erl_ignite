@@ -104,7 +104,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({register_type, Type}, State) ->
-    inner_register_type(Type),
+    try_register_type(Type),
     {noreply, State};
     
 handle_cast(_Msg, State) ->
