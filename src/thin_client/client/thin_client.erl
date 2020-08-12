@@ -21,8 +21,6 @@
          terminate/2,
          code_change/3]).
 
--compile(export_all).
-
 -include("schema.hrl").
 -include("type_binary_spec.hrl").
 -define(SERVER, ?MODULE).

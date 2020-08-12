@@ -145,7 +145,7 @@ get_cache_names(<<Len:?sint_spec, Content/binary>>, Option) ->
                                 Len,
                                 {[], Content})).
 
-get_configuration(<<_:?sint_spec, Bin/binary>> = C, Option) -> 
+get_configuration(<<_:?sint_spec, Bin/binary>>, Option) -> 
     configuration:read(Bin, Option).
 
 create_with_configuration(_, _) -> ok.
