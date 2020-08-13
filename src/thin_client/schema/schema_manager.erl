@@ -180,9 +180,9 @@ inner_register_type(#{name := TypeName,
     Constructor = maps:get(constructor, Register, undefined),
     OnUpgrades = maps:get(on_upgrades, Register, []),
     TypeId = utils:hash_string(TypeName),
-    RegisterMeta = maps:get(register_meta, Register, false),
     AffinityKey = maps:get(affinity_key, Register, undefined),
     SchemaId = utils:calculate_schemaId([Name || #{name := Name} <- FieldDefs]),
+    RegisterMeta = application:get_env(erl_ignite, register_schema, false),
     if TypeType =:= tuple orelse TypeType =:= record ->
             FieldDataR = lists:foldl(fun(#{name := Name, type := Type}, DataAcc) ->
                                              FieldType = Type,
