@@ -333,10 +333,13 @@ sync_query(Query, Handler, #read_option{timeout = Timeout} = Option) ->
     Ref = erlang:make_ref(),
     From = self(),
     wpool:cast(ignite, {query, From, Ref, Query}, random_worker),
-    receive {on_query_success, Ref, Content} ->
-                ignite_op_response_handler:Handler(Content, Option);
-            {on_query_failed, Ref, ErrorMsg} ->
-                {on_query_failed, Query, ErrorMsg}
+    receive {query_result, Ref, Result} -> 
+            case Result of
+                {on_query_success, Content} ->
+                    ignite_op_response_handler:Handler(Content, Option);
+                {on_query_failed, ErrorMsg} ->
+                    {on_query_failed, Query, ErrorMsg}
+            end
     after Timeout -> 
               {on_query_failed, Query, timeout}
     end.
@@ -354,7 +357,7 @@ sql_sync_query(Worker, Query, #read_option{timeout = Timeout}) ->
     Ref = erlang:make_ref(),
     From = self(),
     wpool_process:cast(Worker, {query, From, Ref, Query}),
-    receive Any -> Any
+    receive {query_result, Ref, Result} -> Result
     after Timeout -> {on_query_failed, Query, timeout}
     end.
 
@@ -362,7 +365,7 @@ inner_query(Cache, Table, Sql, Arguments, SqlOptions, WriteOption, ReadOption) -
     Worker = wpool_pool:random_worker(ignite),
     Query = ignite_sql_query:query(Cache, Table, Sql, Arguments, SqlOptions, WriteOption),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_result{cursor_id = CursorId,
                               pairs = Pairs,
                               has_more = HasMore} = ignite_op_response_handler:query(Content, ReadOption),
@@ -376,7 +379,7 @@ inner_query(Cache, Table, Sql, Arguments, SqlOptions, WriteOption, ReadOption) -
 inner_query_next_page(Worker, CursorId, Acc, ReadOption) ->
     Query = ignite_sql_query:query_next_page(CursorId),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_result{pairs = Pairs,
                               has_more = HasMore} = ignite_op_response_handler:query_next_page(Content, ReadOption),
             Acc2 = Acc ++ Pairs,
@@ -391,7 +394,7 @@ inner_query_fields(Cache, Sql, Arguments, SqlOptions, WriteOption, ReadOption) -
     Worker = wpool_pool:random_worker(ignite),
     {HasNames, Query} = ignite_sql_query:query_fields(Cache, Sql, Arguments, SqlOptions, WriteOption),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_fields_result{cursor_id = CursorId,
                                      column = Column,
                                      names = Names,
@@ -406,7 +409,7 @@ inner_query_fields(Cache, Sql, Arguments, SqlOptions, WriteOption, ReadOption) -
 inner_query_fields_next_page(Worker, CursorId, Column, Names, Acc, ReadOption) ->
     Query = ignite_sql_query:query_fields_next_page(CursorId),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_fields_result{rows = Rows,
                                      has_more = HasMore} = ignite_op_response_handler:query_fields_next_page(Column, Content, ReadOption),
             Acc2 = Acc ++ Rows,
@@ -425,7 +428,7 @@ inner_batch_query(Cache, Table, Sql, BatchCall, Arguments, SqlOptions, WriteOpti
     Worker = wpool_pool:random_worker(ignite),
     Query = ignite_sql_query:query(Cache, Table, Sql, Arguments, SqlOptions, WriteOption),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_result{cursor_id = CursorId,
                               pairs = Pairs,
                               has_more = HasMore} = ignite_op_response_handler:query(Content, ReadOption),
@@ -440,7 +443,7 @@ inner_batch_query(Cache, Table, Sql, BatchCall, Arguments, SqlOptions, WriteOpti
 inner_batch_query_next_page(Worker, CursorId, BatchCall, ReadOption) ->
     Query = ignite_sql_query:query_next_page(CursorId),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_result{pairs = Pairs,
                               has_more = HasMore} = ignite_op_response_handler:query_next_page(Content, ReadOption),
             BatchCall(Pairs),
@@ -455,7 +458,7 @@ inner_batch_query_fields(Cache, Sql, BatchCall, Arguments, SqlOptions, WriteOpti
     Worker = wpool_pool:random_worker(ignite),
     {HasNames, Query} = ignite_sql_query:query_fields(Cache, Sql, Arguments, SqlOptions, WriteOption),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_fields_result{cursor_id = CursorId,
                                      column = Column,
                                      names = Names,
@@ -471,7 +474,7 @@ inner_batch_query_fields(Cache, Sql, BatchCall, Arguments, SqlOptions, WriteOpti
 inner_batch_query_fields_next_page(Worker, CursorId, Column, Names, BatchCall, ReadOption) ->
     Query = ignite_sql_query:query_fields_next_page(CursorId),
     case sql_sync_query(Worker, Query, ReadOption) of
-        {on_query_success, _, Content} ->
+        {on_query_success, Content} ->
             #sql_query_fields_result{rows = Rows,
                                      has_more = HasMore} = ignite_op_response_handler:query_fields_next_page(Column, Content, ReadOption),
             BatchCall(Names, Rows),

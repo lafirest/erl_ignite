@@ -176,7 +176,7 @@ do_handle_info({tcp, Data}, #client{requests = Requests} = Client) ->
         undefined ->
             {noreply, Client};
         #request{ref = Ref, from = From} ->
-            erlang:send(From, {Status, Ref, Content}),
+            erlang:send(From, {query_result, Ref, {Status, Content}}),
             {noreply, Client#client{requests = maps:remove(ReqId, Requests)}}
     end;
 
