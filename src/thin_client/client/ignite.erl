@@ -202,20 +202,23 @@ query_fields(Cache, Sql, Arguments, Option) ->
                          end)
     end.
 
-query_row(Cache, Sql) -> erlang:hd(query_fields(Cache, Sql)).
-query_row(Cache, Sql, Arguments) -> erlang:hd(query_fields(Cache, Sql, Arguments)).
-query_row(Cache, Sql, Arguments, Option) -> erlang:hd(query_fields(Cache, Sql, Arguments, Option)).
+query_row(Cache, Sql) -> safe_row(query_fields(Cache, Sql)).
+query_row(Cache, Sql, Arguments) -> safe_row(query_fields(Cache, Sql, Arguments)).
+query_row(Cache, Sql, Arguments, Option) -> safe_row(query_fields(Cache, Sql, Arguments, Option)).
 
-query_one(Cache, Sql) -> safe_hd(query_row(Cache, Sql), undefined).
-query_one(Cache, Sql, Arguments, Default) -> safe_hd(query_row(Cache, Sql, Arguments), Default).
-query_one(Cache, Sql, Arguments, Default, Option) -> safe_hd(query_row(Cache, Sql, Arguments, Option), Default).
+query_one(Cache, Sql) -> safe_one(query_fields(Cache, Sql), undefined).
+query_one(Cache, Sql, Arguments, Default) -> safe_one(query_fields(Cache, Sql, Arguments), Default).
+query_one(Cache, Sql, Arguments, Default, Option) -> safe_one(query_fields(Cache, Sql, Arguments, Option), Default).
 
 execute(Cache, Sql) -> query_one(Cache, Sql, [], 0).
 execute(Cache, Sql, Arguments) -> query_one(Cache, Sql, Arguments, 0).
 execute(Cache, Sql, Arguments, Option) -> query_one(Cache, Sql, Arguments, 0, Option).
 
-safe_hd([], Default) -> Default;
-safe_hd([H|_], _) -> H.
+safe_row([]) -> [];
+safe_row([Row|_]) -> Row.
+
+safe_one([[H|_]|_], _) -> H;
+safe_one(_, Default) -> Default.
 
 %%----UPSERT API ----------------------------------------------------------
 upsert(Cache, Sql, Arguments, Key, Value) -> upsert(Cache, Sql, Arguments, Key, Value, #{}).
