@@ -61,7 +61,7 @@ inner_write({timestamp, Date}, Bin, _) ->
     <<Bin/binary, ?timestamp_code:?sbyte_spec, Msecs:?slong_spec, 0:?sint_spec>>;
 
 inner_write({date, Date}, Bin, _) ->
-    Msecs = qdate:to_unixtime(Date) * 1000,
+    Msecs = qdate:to_unixtime({Date, {0, 0, 0}}) * 1000,
     <<Bin/binary, ?date_code:?sbyte_spec, Msecs:?slong_spec>>;
 
 inner_write({time, Time}, Bin, _) ->

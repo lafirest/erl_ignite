@@ -39,7 +39,9 @@ inner_read(?uuid_code, <<UUID:16/binary, Bin/binary>>, _) -> {UUID, Bin};
 %% I think msec_fraction_in_nsecs is unnecessary
 inner_read(?timestamp_code, <<Msecs:?slong_spec, _:?sint_spec, Bin/binary>>, _) -> {qdate:to_date(Msecs div 1000), Bin};
 
-inner_read(?date_code, <<Msecs:?slong_spec, Bin/binary>>, _) -> {qdate:to_date(Msecs div 1000), Bin};
+inner_read(?date_code, <<Msecs:?slong_spec, Bin/binary>>, _) -> 
+    {Date, _} = qdate:to_date(Msecs div 1000),
+    {Date, Bin};
 
 inner_read(?time_code, <<Value:?slong_spec, Bin/binary>>, _) -> {calendar:seconds_to_time(Value div 1000), Bin};
 
