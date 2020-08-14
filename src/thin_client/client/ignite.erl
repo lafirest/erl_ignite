@@ -25,7 +25,7 @@
          query_fields/2, query_fields/3, query_fields/4,
          execute/2, execute/3, execute/4,
          query_row/2, query_row/3, query_row/4,
-         query_one/2, query_row/3, query_one/4, query_one/5,
+         query_one/2, query_one/3, query_one/4, query_one/5,
          batch_query/6,
          batch_query_fields/5,
          upsert/5, upsert/6,
