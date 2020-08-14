@@ -25,7 +25,7 @@
          query_fields/2, query_fields/3, query_fields/4,
          execute/2, execute/3, execute/4,
          query_row/2, query_row/3, query_row/4,
-         query_one/2, query_one/4, query_one/5,
+         query_one/2, query_row/3, query_one/4, query_one/5,
          batch_query/6,
          batch_query_fields/5,
          upsert/5, upsert/6,
@@ -207,6 +207,7 @@ query_row(Cache, Sql, Arguments) -> safe_row(query_fields(Cache, Sql, Arguments)
 query_row(Cache, Sql, Arguments, Option) -> safe_row(query_fields(Cache, Sql, Arguments, Option)).
 
 query_one(Cache, Sql) -> safe_one(query_fields(Cache, Sql), undefined).
+query_one(Cache, Sql, Arguments) -> safe_one(query_fields(Cache, Sql, Arguments), undefined).
 query_one(Cache, Sql, Arguments, Default) -> safe_one(query_fields(Cache, Sql, Arguments), Default).
 query_one(Cache, Sql, Arguments, Default, Option) -> safe_one(query_fields(Cache, Sql, Arguments, Option), Default).
 
