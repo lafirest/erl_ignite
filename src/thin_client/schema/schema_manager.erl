@@ -266,7 +266,7 @@ type_atom2code(bin_string) -> ?string_code;
 type_atom2code(string) -> ?string_code;
 type_atom2code(uuid) -> ?uuid_code;
 type_atom2code(timestamp) -> ?timestamp_code;
-type_atom2code(data) -> ?date_code;
+type_atom2code(date) -> ?date_code;
 type_atom2code(time) -> ?time_code;
 type_atom2code({enum, _}) -> ?enum_code;
 type_atom2code(byte_array) -> ?byte_array_code;
