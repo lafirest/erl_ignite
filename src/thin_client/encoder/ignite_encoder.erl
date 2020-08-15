@@ -132,9 +132,9 @@ inner_write({{object_array, TypeName}, Array}, Bin, Option) ->
 
 inner_write({{collection, Type, ElementType}, Collection}, Bin, Option) ->
     case Type of
-        array ->
+        array_list ->
             RawType = 1,
-            Values = array:to_list(Collection);
+            Values = Collection;
         list ->
             RawType = 2,
             Values = Collection;

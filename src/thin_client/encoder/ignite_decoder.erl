@@ -115,7 +115,7 @@ inner_read(?collection_code, <<Len:?sint_spec, Type:?sbyte_spec, Bin/binary>>, O
     Values = lists:reverse(ValueR),
 
     case Type of
-        1 -> Value = array:from_list(Values);
+        1 -> Value = Values;
         2 -> Value = Values;
         3 -> Value = sets:from_list(Values);
         4 -> Value = ordsets:from_list(Values)
