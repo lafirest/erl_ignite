@@ -283,7 +283,7 @@ type_atom2code(uuid_array) -> ?uuid_array_code;
 type_atom2code(timestamp_array) -> ?timestamp_array_code;
 type_atom2code(date_array) -> ?date_array_code;
 type_atom2code(time_array) -> ?time_array_code;
-type_atom2code({object_array, _}) -> ?complex_object_code;
+type_atom2code({object_array, _}) -> ?object_array_code;
 type_atom2code({collection, _, _}) -> ?collection_code;
 type_atom2code({map, _, _}) -> ?map_code;
 type_atom2code({orddict, _, _}) -> ?map_code;
