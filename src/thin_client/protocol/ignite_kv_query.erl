@@ -95,7 +95,7 @@ clear_key(Cache, Key, Option) ->
     {?OP_CACHE_CLEAR_KEY, write_key(Cache, Key, Option)}.
 
 clear_keys(Cache, Keys, Option) ->
-    Len = elrang:length(Keys),
+    Len = erlang:length(Keys),
     Content = <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec, Len:?sint_spec>>, 
     Content2 = lists:foldl(fun(Key, DataAcc) -> ignite_encoder:write(Key, DataAcc, Option) end,
                            Content,
@@ -124,7 +124,7 @@ remove_if_equals(Cache, Key, Compare, Option) ->
     {?OP_CACHE_REMOVE_IF_EQUALS, Content3}.
 
 remove_keys(Cache, Keys, Option) ->
-    Len = elrang:length(Keys),
+    Len = erlang:length(Keys),
     Content = <<(utils:get_cache_id(Cache)):?sint_spec, 0:?sbyte_spec, Len:?sint_spec>>, 
     Content2 = lists:foldl(fun(Key, DataAcc) -> ignite_encoder:write(Key, DataAcc, Option) end,
                            Content,
