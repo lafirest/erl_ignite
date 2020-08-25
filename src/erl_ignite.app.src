@@ -6,7 +6,8 @@
   {applications,
    [kernel,
     stdlib,
-    worker_pool
+    worker_pool,
+    qdate
    ]},
   {env,[]},
   {modules, []},
