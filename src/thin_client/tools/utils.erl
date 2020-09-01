@@ -49,7 +49,12 @@ to_lower(Char) ->
     end.
 
 string_hash(Char, Acc) -> 31 * Acc + to_lower(Char).
-hash_data(Byte, Acc) -> 31 * Acc + Byte.
+hash_data(Byte, Acc) -> 
+    Byte2 =
+        if Byte =< 16#7F -> Byte;
+           true -> Byte - 16#100
+        end,
+    31 * Acc + Byte2.
 
 calculate_schemaId([]) -> 0;
 calculate_schemaId(Fields) ->
