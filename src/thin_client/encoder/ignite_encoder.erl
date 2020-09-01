@@ -212,7 +212,7 @@ inner_write({{complex_object, TypeName}, Value}, Bin, Option) ->
                                             Offsets)
            end,
            Body = <<FieldData/binary, SchemaData/binary>>,
-           {Flag3, Body, utils:hash_data(Body), BaseOffset + erlang:byte_size(FieldData)}
+           {Flag3, Body, utils:hash_data(FieldData), BaseOffset + erlang:byte_size(FieldData)}
     end,
     <<Bin/binary,
       ?complex_object_code:?sbyte_spec,
