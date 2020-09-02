@@ -12,78 +12,73 @@
          parse_query_options/1,
          parse_sql_options/1]).
 
+-on_load(init/0).
+
 -include("type_spec.hrl").
 -define(FNV1_OFFSET_BASIS, 16#811C9DC5).
 -define(FNV1_PRIME, 16#01000193).
 -define(CACHE_KEY_TAG, ignite_cache).
+-define(APPNAME, erl_ignite).
+-define(LIBNAME, utils_nif).
 
-hash_string(Bin) -> hash_code(Bin, fun string_hash/2, 0).
+init() ->
+    SoName = case code:priv_dir(?APPNAME) of
+                 {error, bad_name} ->
+                     case filelib:is_dir(filename:join(["..", priv])) of
+                         true ->
+                             filename:join(["..", priv, ?LIBNAME]);
+                         _ ->
+                             filename:join([priv, ?LIBNAME])
+                     end;
+                 Dir ->
+                     filename:join(Dir, ?LIBNAME)
+             end,
+    erlang:load_nif(SoName, 0).
 
-hash_raw_string(Bin) -> hash_code(Bin, fun hash_data/2, 0).
-
-hash_data(Bin) -> hash_code(Bin, fun hash_data/2, 1).
-
-hash_code(Bin, Func, Acc) when is_binary(Bin) ->
-    Len = erlang:byte_size(Bin),
-    hash_code_bin(Bin, 0, Len, Func, Acc);
-hash_code(Str, Func, Acc) -> hash_code_str(Str, Func, Acc).
-
-hash_code_bin(_, Len, Len, _, Acc) -> check_result(Acc);
-hash_code_bin(Bin, Pos, Len, Func, Acc) ->
-    Byte = binary:at(Bin, Pos),
-    hash_code_bin(Bin, Pos + 1, Len, Func, check_size(Func(Byte, Acc))).
-
-hash_code_str([], _, Acc) -> check_result(Acc);
-hash_code_str([H|T], Func, Acc) ->
-    hash_code_str(T, Func, check_size(Func(H, Acc))).
-
-check_size(Value) -> Value band 16#FFFFFFFF.
-check_result(Value) ->
-    if Value =< 16#7FFFFFFF -> Value;
-       true -> Value - 16#100000000
+%% use for field name
+hash_string(Bin) ->
+    case erlang:is_binary(Bin) of
+        true ->
+            lower_hash(Bin);
+        _ ->
+            lower_hash(erlang:list_to_binary(Bin))
     end.
 
-to_lower(Char) ->
-    if Char >= $A andalso Char =< $Z -> Char bor 16#20;
-       true -> Char
+%% use for cache id
+hash_raw_string(Bin) -> 
+    case erlang:is_binary(Bin) of
+        true ->
+            data_hash(Bin, 0);
+        _ ->
+            data_hash(erlang:list_to_binary(Bin), 0)
     end.
 
-string_hash(Char, Acc) -> 31 * Acc + to_lower(Char).
-hash_data(Byte, Acc) -> 
-    Byte2 =
-        if Byte =< 16#7F -> Byte;
-           true -> Byte - 16#100
-        end,
-    31 * Acc + Byte2.
+%% use for complex object hash
+hash_data(Bin) ->
+    data_hash(Bin, 1).
 
-calculate_schemaId([]) -> 0;
-calculate_schemaId(Fields) ->
-    Id = lists:foldl(fun(FieldName, Acc) ->
-                             FieldId = utils:hash_string(FieldName),
-                             lists:foldl(fun(Shift, IAcc) ->
-                                                 IAcc2 = (IAcc bxor ((FieldId bsr Shift) band 16#FF)) band 16#FFFFFFFF,
-                                                 (IAcc2 * ?FNV1_PRIME) band 16#FFFFFFFF
-                                         end, Acc, [0, 8, 16, 24])
-                     end,
-                     ?FNV1_OFFSET_BASIS, 
-                     Fields),
-    if Id =< 16#7FFFFFFF -> Id;
-       true -> Id - 16#100000000
-    end.
+data_hash(_, _) ->
+    not_loaded(?LINE).
+
+lower_hash(_) ->
+    not_loaded(?LINE).
+
+calculate_schemaId(_) ->
+    not_loaded(?LINE).
 
 get_cache_id(CacheId) ->
     if is_atom(CacheId) -> persistent_term:get({?CACHE_KEY_TAG, CacheId});
        is_integer(CacheId) -> CacheId;
-       true -> utils:hash_raw_string(CacheId)
+       true -> hash_raw_string(CacheId)
     end.
 
 register_cache({Atom, Name}) ->
-    CacheId = utils:hash_raw_string(Name),
+    CacheId = hash_raw_string(Name),
     persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId);
 
 register_cache(Atom) ->
-    Name = erlang:atom_to_list(Atom),
-    CacheId = utils:hash_raw_string(Name),
+    Name = erlang:atom_to_binary(Atom),
+    CacheId = hash_raw_string(Name),
     persistent_term:put({?CACHE_KEY_TAG, Atom}, CacheId).
 
 to_raw_bool(true) -> 1;
@@ -117,3 +112,6 @@ parse_sql_options(Options) ->
     AsyncCallback = maps:get(async, Options, undefined),
     SqlOptions = maps:get(sql, Options, []),
     {AsyncCallback, SqlOptions, parse_write_options(WriteOptions), parse_read_options(ReadOptions)}.
+
+not_loaded(Line) ->
+    erlang:nif_error({not_loaded, [{module, ?MODULE}, {line, Line}]}).
