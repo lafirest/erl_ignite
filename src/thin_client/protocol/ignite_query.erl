@@ -12,5 +12,5 @@ on_response(<<ReqId:?slong_spec, Status:?sint_spec, Bin/binary>>) ->
         0 -> {on_query_success, ReqId, Bin};
         _ ->
             ErrMsg = ignite_decoder:read_value(Bin),
-            {on_query_failed, ReqId,  ErrMsg}
+            {on_query_failed, ReqId, ErrMsg}
     end.

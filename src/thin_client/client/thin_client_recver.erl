@@ -164,18 +164,14 @@ tick_recv() ->
     erlang:send(self(), recv).
 
 dispatch_packate(Parent, Bin) ->
-    BufferSize = erlang:byte_size(Bin),
-    if BufferSize < ?DATALENSIZE -> Bin;
-       true ->
-           <<MsgLen:?sint_spec, Body/binary>> = Bin,
-           if MsgLen =< BufferSize - ?DATALENSIZE ->
-                  <<Msg:MsgLen/binary, BufferRest/binary>> = Body,
-                  erlang:send(Parent, {tcp, Msg}),
-                  dispatch_packate(Parent, BufferRest);
-              true -> Bin
-           end
+    case Bin of
+        <<MsgLen:?sint_spec, Msg:MsgLen/binary, Rest/binary>> ->
+            erlang:send(Parent, {tcp, Msg}),
+            dispatch_packate(Parent, Rest);
+        _ -> 
+            Bin
     end.
-
+       
 %%%===================================================================
 %%% API functions
 %%%===================================================================
