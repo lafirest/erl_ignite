@@ -11,7 +11,7 @@
   0},
  {<<"qdate_localtime">>,{pkg,<<"qdate_localtime">>,<<"1.1.0">>},1},
  {<<"sync">>,
-  {git,"git://github.com/rustyio/sync.git",
+  {git,"https://github.com/rustyio/sync.git",
        {ref,"9106be75883d7646dae72d4ac80c6ea88464a5ca"}},
   0},
  {<<"worker_pool">>,
