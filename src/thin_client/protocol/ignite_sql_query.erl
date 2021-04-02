@@ -11,7 +11,9 @@
 -export([query/6,
          query_next_page/1,
          query_fields/5,
-         query_fields_next_page/1]).
+         query_fields_next_page/1,
+         query_scan/2,
+         query_scan_next_page/1]).
 
 %% TODO ?? i think i don't need implement OP_QUERY_SCAN and OP_QUERY_SCAN_CURSOR_GET_PAGE
 
@@ -106,6 +108,21 @@ query_fields(Cache, Sql, Arguments, OptionsArg, WriteOption) ->
 
 query_fields_next_page(CursorId) -> 
     {?OP_QUERY_SQL_FIELDS_CURSOR_GET_PAGE, <<CursorId:?slong_spec>>}.
+
+query_scan(Cache, OptionsArg) -> 
+    Options = maps:from_list(OptionsArg),
+    Local = utils:to_raw_bool(maps:get(local, Options, false)),
+    PageSize = maps:get(page_size, Options, ?DEFAULT_PAGE_SIZE),
+    Content = <<(utils:get_cache_id(Cache)):?sint_spec, 
+                0:?sbyte_spec, 
+                ?null_code:?sbyte_spec, 
+                PageSize:?sint_spec, 
+                (-1):?sint_spec, 
+                Local:?sbyte_spec>>,
+    {?OP_QUERY_SCAN, Content}.
+
+query_scan_next_page(CursorId) -> 
+    {?OP_QUERY_SCAN_CURSOR_GET_PAGE, <<CursorId:?slong_spec>>}.
 
 get_raw_statement(any) -> 0;
 get_raw_statement(select) -> 1;

@@ -25,6 +25,8 @@
          query_next_page/2,
          query_fields/3,
          query_fields_next_page/3,
+         query_scan/2,
+         query_scan_next_page/2,
          get_name/2,
          register_name/2,
          get_type/2,
@@ -124,6 +126,12 @@ query_fields_next_page(Column, <<RowNum:?sint_spec, Bin/binary>>, ReadOption) ->
     {rows = Rows,
      has_more = utils:from_raw_bool(RawHasMore)}.
 
+query_scan(<<CursorId:?slong_spec, Row:?sint_spec, Bin/binary>>, ReadOption) ->  
+    handle_sql_scan_response(CursorId, Row, Bin, ReadOption).
+
+query_scan_next_page(<<CursorId:?slong_spec, Row:?slong_spec, Bin/binary>>, ReadOption) ->  
+    handle_sql_scan_response(CursorId, Row, Bin, ReadOption).
+
 get_name(Bin, ReadOption) -> ignite_decoder:read_value(Bin, ReadOption).
 
 register_name(_, _) -> ok.
@@ -153,6 +161,20 @@ get_or_create_with_configuration(_, _) -> ok.
 destroy_cache(_, _) -> ok.
 
 handle_sql_query_response(CursorId, Row, Bin, ReadOption) ->
+    {Pairs, <<HasMore:?sbyte_spec, _/binary>>} = 
+    loop:dotimes(fun({PairAcc, BinAcc}) -> 
+                         {K, BinAcc2} = ignite_decoder:read(BinAcc, ReadOption),
+                         {V, BinAcc3} = ignite_decoder:read(BinAcc2, ReadOption),
+                         Pair = {K, V},
+                         {[Pair | PairAcc], BinAcc3}
+                 end,
+                 Row,
+                 {[], Bin}),
+    #sql_query_result{cursor_id = CursorId, 
+                      pairs = lists:reverse(Pairs),
+                      has_more = utils:from_raw_bool(HasMore)}.
+
+handle_sql_scan_response(CursorId, Row, Bin, ReadOption) ->
     {Pairs, <<HasMore:?sbyte_spec, _/binary>>} = 
     loop:dotimes(fun({PairAcc, BinAcc}) -> 
                          {K, BinAcc2} = ignite_decoder:read(BinAcc, ReadOption),

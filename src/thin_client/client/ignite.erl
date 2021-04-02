@@ -22,6 +22,7 @@
          remove_keys/2, remove_keys/3, 
          remove_all/1, remove_all/2,
          query/3, query/4, query/5,
+         scan/1, scan/2,
          query_fields/2, query_fields/3, query_fields/4,
          execute/2, execute/3, execute/4,
          query_row/2, query_row/3, query_row/4,
@@ -210,6 +211,20 @@ query_one(Cache, Sql) -> safe_one(query_fields(Cache, Sql), undefined).
 query_one(Cache, Sql, Arguments) -> safe_one(query_fields(Cache, Sql, Arguments), undefined).
 query_one(Cache, Sql, Arguments, Default) -> safe_one(query_fields(Cache, Sql, Arguments), Default).
 query_one(Cache, Sql, Arguments, Default, Option) -> safe_one(query_fields(Cache, Sql, Arguments, Option), Default).
+
+scan(Cache) -> scan(Cache, #{}).
+scan(Cache, Option) ->
+    {Async, SqlOptions, WO, RO} = utils:parse_sql_options(Option),
+    case Async of
+        undefined -> inner_scan(Cache, SqlOptions, RO);
+        _ ->
+            erlang:spawn(fun() -> 
+                                 case inner_scan(Cache, SqlOptions, RO) of
+                                     {on_query_failed, _, _} = Error -> Error;
+                                     Value -> do_async_callback(Async, Value)
+                                 end
+                         end)
+    end.
 
 execute(Cache, Sql) -> query_one(Cache, Sql, [], 0).
 execute(Cache, Sql, Arguments) -> query_one(Cache, Sql, Arguments, 0).
@@ -426,6 +441,35 @@ inner_query_fields_next_page(Worker, CursorId, Column, Names, Acc, ReadOption) -
 
 make_query_fields_result([], Values) -> Values;
 make_query_fields_result(Names, Values) -> {Names, Values}.
+
+inner_scan(Cache, SqlOptions, ReadOption) ->
+    Worker = wpool_pool:random_worker(ignite),
+    Query = ignite_sql_query:query_scan(Cache, SqlOptions),
+    case sql_sync_query(Worker, Query, ReadOption) of
+        {on_query_success, Content} ->
+            #sql_query_result{cursor_id = CursorId,
+                              pairs = Pairs,
+                              has_more = HasMore} = ignite_op_response_handler:query_scan(Content, ReadOption),
+            case HasMore of
+                false -> Pairs;
+                true -> inner_scan_next_page(Worker, CursorId, Pairs, ReadOption)
+            end;
+        Error -> Error
+    end.
+
+inner_scan_next_page(Worker, CursorId, Acc, ReadOption) ->
+    Query = ignite_sql_query:query_scan_next_page(CursorId),
+    case sql_sync_query(Worker, Query, ReadOption) of
+        {on_query_success, Content} ->
+            #sql_query_result{pairs = Pairs,
+                              has_more = HasMore} = ignite_op_response_handler:query_scan_next_page(Content, ReadOption),
+            Acc2 = Acc ++ Pairs,
+            case HasMore of
+                false -> Acc2;
+                true -> inner_scan_next_page(Worker, CursorId, Acc2, ReadOption)
+            end;
+        Error -> Error
+    end.
 
 %%---- Batch SQL Internal functions-------------------------------------------------------------------
 inner_batch_query(Cache, Table, Sql, BatchCall, Arguments, SqlOptions, WriteOption, ReadOption) ->
